@@ -8,6 +8,7 @@ import Footer from './components/Footer';
 import AiBarista from './components/AiBarista';
 import Location from './components/Location';
 import Contact from './components/Contact';
+import PojokCerita from './components/PojokCerita';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Hero />
         <Philosophy />
         <Menu />
+        <PojokCerita />
         <Vibe />
         <Location />
         <Contact />
