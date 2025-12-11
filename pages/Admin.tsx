@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { Lock } from 'lucide-react';
+import { Lock, Menu, X } from 'lucide-react';
 import MenuManager from '../components/admin/MenuManager';
 import StoryModerator from '../components/admin/StoryModerator';
 import AnnouncementManager from '../components/admin/AnnouncementManager';
@@ -13,7 +13,8 @@ const Admin: React.FC = () => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
-    const [activeTab, setActiveTab] = useState('menu');
+    const [activeTab, setActiveTab] = useState('pos');
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -109,43 +110,50 @@ const Admin: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 flex">
-            {/* Sidebar */}
-            <aside className="w-64 bg-brewasa-dark text-white p-6 hidden md:block fixed h-full z-10">
-                <h2 className="text-xl font-bold mb-8 flex items-center gap-2">
+        <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+            {/* Mobile Header */}
+            <div className="md:hidden bg-brewasa-dark text-white p-4 flex justify-between items-center sticky top-0 z-30 shadow-md">
+                <h2 className="font-bold flex items-center gap-2">
                     <Lock className="w-5 h-5" /> Admin
                 </h2>
+                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+                    {isMobileMenuOpen ? <X /> : <Menu />}
+                </button>
+            </div>
+
+            {/* Sidebar */}
+            <aside className={`
+                fixed inset-y-0 left-0 z-20 w-64 bg-brewasa-dark text-white p-6 transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:block shadow-xl
+                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+            `}>
+                <div className="flex justify-between items-center mb-8">
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                        <Lock className="w-5 h-5" /> Admin Panel
+                    </h2>
+                    <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-white">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+
                 <nav className="space-y-2">
-                    <button
-                        onClick={() => setActiveTab('pos')}
-                        className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === 'pos' ? 'bg-brewasa-copper text-white' : 'hover:bg-white/10 text-gray-300'}`}
-                    >
-                        Mode Kasir (POS)
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('history')}
-                        className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === 'history' ? 'bg-brewasa-copper text-white' : 'hover:bg-white/10 text-gray-300'}`}
-                    >
-                        Riwayat Transaksi
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('menu')}
-                        className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === 'menu' ? 'bg-brewasa-copper text-white' : 'hover:bg-white/10 text-gray-300'}`}
-                    >
-                        Menu Manager
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('stories')}
-                        className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === 'stories' ? 'bg-brewasa-copper text-white' : 'hover:bg-white/10 text-gray-300'}`}
-                    >
-                        Story Moderation
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('announcements')}
-                        className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === 'announcements' ? 'bg-brewasa-copper text-white' : 'hover:bg-white/10 text-gray-300'}`}
-                    >
-                        Announcements
-                    </button>
+                    {[
+                        { id: 'pos', label: 'Mode Kasir (POS)' },
+                        { id: 'history', label: 'Riwayat Transaksi' },
+                        { id: 'menu', label: 'Menu Manager' },
+                        { id: 'stories', label: 'Story Moderation' },
+                        { id: 'announcements', label: 'Announcements' }
+                    ].map(item => (
+                        <button
+                            key={item.id}
+                            onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                            }}
+                            className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === item.id ? 'bg-brewasa-copper text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}
+                        >
+                            {item.label}
+                        </button>
+                    ))}
                 </nav>
                 <div className="absolute bottom-6 left-6 right-6">
                     <button
@@ -157,8 +165,16 @@ const Admin: React.FC = () => {
                 </div>
             </aside>
 
+            {/* Overlay for mobile sidebar */}
+            {isMobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-10 md:hidden"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
             {/* Main Content */}
-            <main className="flex-1 p-8 md:ml-64 bg-gray-50 min-h-screen">
+            <main className="flex-1 p-4 md:p-8 bg-gray-50 min-h-screen overflow-y-auto w-full">
                 {activeTab === 'pos' && <PosSystem />}
                 {activeTab === 'history' && <TransactionHistory />}
                 {activeTab === 'menu' && <MenuManager />}
