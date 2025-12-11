@@ -36,7 +36,7 @@ const Vibe: React.FC = () => {
             <div className="rounded-3xl shadow-2xl overflow-hidden transform hover:scale-[1.02] transition-transform duration-300">
               <iframe
                 style={{ borderRadius: '12px' }}
-                src="https://open.spotify.com/embed/playlist/37i9dQZF1DX6VdMW310YC7?utm_source=generator&theme=0"
+                src="https://open.spotify.com/embed/playlist/37366RSekcucxiB7Fkw13E?utm_source=generator"
                 width="100%"
                 height="352"
                 frameBorder="0"

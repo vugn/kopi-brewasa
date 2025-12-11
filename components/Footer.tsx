@@ -13,13 +13,13 @@ const Footer: React.FC = () => {
           </div>
 
           <div className="flex gap-6">
-            <a href="#" className="p-3 bg-brewasa-dark text-brewasa-cream rounded-full hover:bg-brewasa-copper transition-colors">
+            <a href="https://www.instagram.com/kopibrewasa" target="_blank" rel="noopener noreferrer" className="p-3 bg-brewasa-dark text-brewasa-cream rounded-full hover:bg-brewasa-copper transition-colors">
               <Instagram className="w-5 h-5" />
             </a>
-            <a href="#" className="p-3 bg-brewasa-dark text-brewasa-cream rounded-full hover:bg-brewasa-copper transition-colors">
+            <a href="#location" className="p-3 bg-brewasa-dark text-brewasa-cream rounded-full hover:bg-brewasa-copper transition-colors">
               <MapPin className="w-5 h-5" />
             </a>
-            <a href="#" className="p-3 bg-brewasa-dark text-brewasa-cream rounded-full hover:bg-brewasa-copper transition-colors">
+            <a href="https://wa.me/6281373388605" target="_blank" rel="noopener noreferrer" className="p-3 bg-brewasa-dark text-brewasa-cream rounded-full hover:bg-brewasa-copper transition-colors">
               <Phone className="w-5 h-5" />
             </a>
           </div>

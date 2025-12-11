@@ -7,6 +7,7 @@ import Vibe from './components/Vibe';
 import Footer from './components/Footer';
 import AiBarista from './components/AiBarista';
 import Location from './components/Location';
+import Contact from './components/Contact';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Menu />
         <Vibe />
         <Location />
+        <Contact />
       </main>
       <Footer />
       <AiBarista />
