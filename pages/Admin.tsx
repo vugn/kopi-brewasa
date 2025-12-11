@@ -4,6 +4,8 @@ import { Lock } from 'lucide-react';
 import MenuManager from '../components/admin/MenuManager';
 import StoryModerator from '../components/admin/StoryModerator';
 import AnnouncementManager from '../components/admin/AnnouncementManager';
+import PosSystem from '../components/admin/PosSystem';
+import TransactionHistory from '../components/admin/TransactionHistory';
 
 const Admin: React.FC = () => {
     const [session, setSession] = useState<any>(null);
@@ -12,6 +14,20 @@ const Admin: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [activeTab, setActiveTab] = useState('menu');
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+        });
+
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -42,8 +58,6 @@ const Admin: React.FC = () => {
     const handleLogout = async () => {
         await supabase.auth.signOut();
     };
-
-    // ... handleLogout
 
     if (!session) {
         return (
@@ -97,11 +111,23 @@ const Admin: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-50 flex">
             {/* Sidebar */}
-            <aside className="w-64 bg-brewasa-dark text-white p-6 hidden md:block fixed h-full">
+            <aside className="w-64 bg-brewasa-dark text-white p-6 hidden md:block fixed h-full z-10">
                 <h2 className="text-xl font-bold mb-8 flex items-center gap-2">
                     <Lock className="w-5 h-5" /> Admin
                 </h2>
                 <nav className="space-y-2">
+                    <button
+                        onClick={() => setActiveTab('pos')}
+                        className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === 'pos' ? 'bg-brewasa-copper text-white' : 'hover:bg-white/10 text-gray-300'}`}
+                    >
+                        Mode Kasir (POS)
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('history')}
+                        className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === 'history' ? 'bg-brewasa-copper text-white' : 'hover:bg-white/10 text-gray-300'}`}
+                    >
+                        Riwayat Transaksi
+                    </button>
                     <button
                         onClick={() => setActiveTab('menu')}
                         className={`block w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${activeTab === 'menu' ? 'bg-brewasa-copper text-white' : 'hover:bg-white/10 text-gray-300'}`}
@@ -132,7 +158,9 @@ const Admin: React.FC = () => {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 p-8 md:ml-64">
+            <main className="flex-1 p-8 md:ml-64 bg-gray-50 min-h-screen">
+                {activeTab === 'pos' && <PosSystem />}
+                {activeTab === 'history' && <TransactionHistory />}
                 {activeTab === 'menu' && <MenuManager />}
                 {activeTab === 'stories' && <StoryModerator />}
                 {activeTab === 'announcements' && <AnnouncementManager />}
