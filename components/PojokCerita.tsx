@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { PenTool, Send, Heart, Flame, ArrowRight } from 'lucide-react';
+import { PenTool, Send, Heart, Flame, ArrowRight, AlertCircle } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import DOMPurify from 'dompurify';
 import { formatDistanceToNow } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import FullCerita from './FullCerita';
+import { containsProfanity } from '../utils/textFilter';
 
 interface Story {
     id: number;
@@ -112,14 +113,20 @@ const PojokCerita: React.FC = () => {
             return;
         }
 
+        // 2. Toxic Word Filter Check
+        if (containsProfanity(newMessage) || containsProfanity(newName)) {
+            setErrorMsg('Ups! Gunakan bahasa yang sopan dan positif ya. 😊');
+            return;
+        }
+
         setSubmitLoading(true);
 
         try {
-            // 2. Sanitize Input
+            // 3. Sanitize Input
             const sanitizedMessage = DOMPurify.sanitize(newMessage);
             const sanitizedName = DOMPurify.sanitize(newName) || 'Anonim';
 
-            // 3. Insert to Supabase
+            // 4. Insert to Supabase
             const { data, error } = await supabase
                 .from('stories')
                 .insert([{ name: sanitizedName, message: sanitizedMessage }])
@@ -127,7 +134,7 @@ const PojokCerita: React.FC = () => {
 
             if (error) throw error;
 
-            // 4. Update UI & Local Config
+            // 5. Update UI & Local Config
             if (data) {
                 // Refresh local list (naive approach, re-fetch is safer for correct ordering)
                 await fetchStories();
@@ -211,6 +218,13 @@ const PojokCerita: React.FC = () => {
                 {/* Writing Modal/Form */}
                 <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isWriting ? 'max-h-[500px] opacity-100 mb-16' : 'max-h-0 opacity-0'}`}>
                     <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-xl border border-brewasa-copper/20 relative">
+                        <div className="bg-yellow-50 text-yellow-800 text-xs px-4 py-3 rounded-xl mb-4 flex items-start gap-2 border border-yellow-100">
+                            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                            <p>
+                                Mohon gunakan bahasa yang sopan dan positif.
+                                Cerita dengan kata-kata kasar/toxic tidak akan terkirim.
+                            </p>
+                        </div>
                         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                             <input
                                 type="text"
