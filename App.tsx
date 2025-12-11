@@ -3,14 +3,17 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
 import Home from './pages/Home';
 import Admin from './pages/Admin';
+import Maintenance from './pages/Maintenance';
 
 function App() {
+  const isMaintenance = import.meta.env.VITE_MAINTENANCE_MODE === 'true';
+
   return (
     <div className="bg-[#F7E9D3] min-h-screen">
       <CartProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={isMaintenance ? <Maintenance /> : <Home />} />
             <Route path="/admin" element={<Admin />} />
           </Routes>
         </BrowserRouter>
