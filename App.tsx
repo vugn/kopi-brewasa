@@ -9,23 +9,30 @@ import AiBarista from './components/AiBarista';
 import Location from './components/Location';
 import Contact from './components/Contact';
 import PojokCerita from './components/PojokCerita';
+import { CartProvider } from './context/CartContext';
+import CartFloatingButton from './components/CartFloatingButton';
+import CartDrawer from './components/CartDrawer';
 
 function App() {
   return (
-    <div className="font-sans antialiased text-gray-900 bg-[#F7E9D3] min-h-screen selection:bg-brewasa-copper selection:text-white">
-      <Navbar />
-      <main>
-        <Hero />
-        <Philosophy />
-        <Menu />
-        <PojokCerita />
-        <Vibe />
-        <Location />
-        <Contact />
-      </main>
-      <Footer />
-      <AiBarista />
-    </div>
+    <CartProvider>
+      <div className="font-sans antialiased text-gray-900 bg-[#F7E9D3] min-h-screen selection:bg-brewasa-copper selection:text-white">
+        <Navbar />
+        <main>
+          <Hero />
+          <Philosophy />
+          <Menu />
+          <PojokCerita />
+          <Vibe />
+          <Location />
+          <Contact />
+        </main>
+        <Footer />
+        <CartFloatingButton />
+        <CartDrawer />
+        <AiBarista />
+      </div>
+    </CartProvider>
   );
 }
 
