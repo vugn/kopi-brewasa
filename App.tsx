@@ -6,6 +6,7 @@ import Menu from './components/Menu';
 import Vibe from './components/Vibe';
 import Footer from './components/Footer';
 import AiBarista from './components/AiBarista';
+import Location from './components/Location';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Philosophy />
         <Menu />
         <Vibe />
+        <Location />
       </main>
       <Footer />
       <AiBarista />

@@ -5,6 +5,7 @@ export interface MenuItem {
   price: string;
   tags: string[];
   image: string;
+  forWhat: string;
 }
 
 export interface SpotifyTrack {

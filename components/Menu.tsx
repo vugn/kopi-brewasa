@@ -4,27 +4,48 @@ import { MenuItem } from '../types';
 const menuItems: MenuItem[] = [
   {
     id: '1',
-    name: 'Kopi Renjana',
-    description: 'Pahit, tegas, membangunkan logikamu yang tertidur. Double shot espresso dengan air panas suhu presisi.',
-    price: '28k',
-    tags: ['Americano', 'Long Black', 'Strong'],
-    image: 'https://picsum.photos/seed/americano/400/300'
+    name: 'Brewasa Butter Bliss',
+    description: 'Perpaduan espresso Brewasa dengan butter-caramel glaze yang creamy, wangi, dan comforting. Lembut, nggak eneg, dan bikin hangat dari tegukan pertama.',
+    price: '35k',
+    tags: ['Butter', 'Creamy', 'Comfort'],
+    image: 'https://picsum.photos/seed/butter/400/300',
+    forWhat: 'Untuk jiwa yang lelah dan butuh pelukan manis. Butter Bliss dibuat sebagai "comfort drink"—minuman yang bikin kamu merasa aman dan diterima, bahkan di hari paling berat.'
   },
   {
     id: '2',
-    name: 'Latte Jeda',
-    description: 'Manis yang pas, tidak berlebihan, seperti istirahat yang cukup. Perpaduan espresso, susu creamy, dan gula aren asli.',
-    price: '32k',
-    tags: ['Aren Latte', 'Creamy', 'Comfort'],
-    image: 'https://picsum.photos/seed/latte/400/300'
+    name: 'Aura Aren Latte',
+    description: 'Espresso Brewasa berpadu dengan gula aren smoky-sweet yang khas Nusantara. Smooth, natural, dan terasa hangat di tenggorokan.',
+    price: '28k',
+    tags: ['Aren', 'Nusantara', 'Warm'],
+    image: 'https://picsum.photos/seed/aren/400/300',
+    forWhat: 'Untuk jiwa yang mencari ketenangan dan grounding. Aura Aren hadir untuk ngingetin bahwa hidup tetap manis kalau dinikmati perlahan.'
   },
   {
     id: '3',
-    name: 'Berry Refleksi',
-    description: 'Segar, mengejutkan, memberi perspektif baru. Cold brew dengan sentuhan berry dan soda water.',
-    price: '35k',
-    tags: ['Mocktail', 'Refreshing', 'Unique'],
-    image: 'https://picsum.photos/seed/mocktail/400/300'
+    name: 'Classic Brewasa Latte',
+    description: 'Signature espresso Brewasa berpadu dengan creamy milk yang seimbang. Simple, clean, dan nyaman—minuman yang nggak pernah salah.',
+    price: '30k',
+    tags: ['Classic', 'Balanced', 'Clean'],
+    image: 'https://picsum.photos/seed/classic/400/300',
+    forWhat: 'Untuk jiwa yang ingin stabil dan kembali ke dasar. Classic Latte adalah pilihan ketika kamu cuma ingin sesuatu yang familiar dan bikin hati tenang.'
+  },
+  {
+    id: '4',
+    name: 'Americano Breeze',
+    description: 'Espresso Brewasa yang bold dan clean disajikan dengan air dingin segar. Light, refreshing, tapi tetap ngasih energi yang solid.',
+    price: '25k',
+    tags: ['Bold', 'Focus', 'Fresh'],
+    image: 'https://picsum.photos/seed/americano/400/300',
+    forWhat: 'Untuk jiwa yang butuh kejernihan dan fokus. Americano Breeze seperti hembusan angin sejuk yang bikin kepala kembali jernih dan siap lanjut lagi.'
+  },
+  {
+    id: '5',
+    name: 'Matcha Latte',
+    description: 'Matcha smooth dengan creamy milk. Earthy, mellow, dan calming tanpa manis berlebihan.',
+    price: '32k',
+    tags: ['Matcha', 'Calming', 'Zen'],
+    image: 'https://picsum.photos/seed/matcha/400/300',
+    forWhat: 'Untuk jiwa yang penuh pikiran dan butuh jeda. Matcha Latte dibuat supaya kamu bisa tarik napas panjang, merilekskan bahu, dan melambat sebentar di tengah rutinitas.'
   }
 ];
 
@@ -44,14 +65,14 @@ const Menu: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
           {menuItems.map((item) => (
-            <div key={item.id} className="group cursor-default">
+            <div key={item.id} className="group cursor-default flex flex-col h-full">
               {/* Image Card */}
               <div className="relative overflow-hidden rounded-2xl aspect-[4/3] mb-6">
-                <img 
-                  src={item.image} 
-                  alt={item.name} 
+                <img
+                  src={item.image}
+                  alt={item.name}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors duration-500"></div>
@@ -61,20 +82,28 @@ const Menu: React.FC = () => {
               </div>
 
               {/* Text Content */}
-              <div className="text-center px-4">
+              <div className="text-center px-4 flex-grow flex flex-col">
                 <h4 className="text-2xl font-bold text-brewasa-dark mb-2 font-serif group-hover:text-brewasa-copper transition-colors">
                   {item.name}
                 </h4>
                 <div className="flex justify-center gap-2 mb-4">
-                    {item.tags.map(tag => (
-                        <span key={tag} className="text-[10px] uppercase tracking-wider border border-brewasa-dark/20 px-2 py-0.5 rounded text-brewasa-dark/60">
-                            {tag}
-                        </span>
-                    ))}
+                  {item.tags.map(tag => (
+                    <span key={tag} className="text-[10px] uppercase tracking-wider border border-brewasa-dark/20 px-2 py-0.5 rounded text-brewasa-dark/60">
+                      {tag}
+                    </span>
+                  ))}
                 </div>
-                <p className="text-brewasa-dark/70 leading-relaxed text-sm">
+                <p className="text-brewasa-dark/70 leading-relaxed text-sm mb-6">
                   {item.description}
                 </p>
+
+                {/* Untuk Apa Section */}
+                <div className="mt-auto pt-6 border-t border-brewasa-dark/10">
+                  <p className="text-xs font-bold text-brewasa-copper uppercase tracking-widest mb-2">Untuk Apa?</p>
+                  <p className="text-brewasa-dark/60 text-sm italic font-light">
+                    "{item.forWhat}"
+                  </p>
+                </div>
               </div>
             </div>
           ))}
