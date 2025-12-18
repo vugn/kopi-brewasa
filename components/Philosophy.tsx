@@ -6,13 +6,13 @@ const Philosophy: React.FC = () => {
     <section id="philosophy" className="py-24 bg-brewasa-cream relative">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row items-center gap-16">
-          
+
           {/* Visual Side */}
           <div className="w-full md:w-1/2 relative">
             <div className="aspect-[4/5] rounded-t-full overflow-hidden border-b-4 border-brewasa-copper shadow-2xl">
-              <img 
-                src="https://picsum.photos/seed/reflection/800/1000" 
-                alt="Philosophy of Coffee" 
+              <img
+                src="./whyus.png"
+                alt="Philosophy of Coffee"
                 className="w-full h-full object-cover filter sepia-[0.3]"
               />
             </div>
@@ -30,20 +30,20 @@ const Philosophy: React.FC = () => {
             <h3 className="text-4xl md:text-5xl font-bold text-brewasa-dark mb-8">
               Kenapa <span className="italic font-light">Brewasa</span>?
             </h3>
-            
+
             <div className="space-y-6 text-brewasa-dark/80 leading-relaxed font-light text-lg">
               <p>
-                Brewasa bukan sekadar nama. Ini adalah perpaduan antara 
-                <span className="font-semibold text-brewasa-dark"> "Brew" </span> 
-                (seduhan) dan 
+                Brewasa bukan sekadar nama. Ini adalah perpaduan antara
+                <span className="font-semibold text-brewasa-dark"> "Brew" </span>
+                (seduhan) dan
                 <span className="font-semibold text-brewasa-dark"> "Dewasa"</span>.
               </p>
               <p>
-                Menjadi dewasa itu melelahkan, penuh tuntutan, dan seringkali bising. 
+                Menjadi dewasa itu melelahkan, penuh tuntutan, dan seringkali bising.
                 Kami percaya bahwa setiap orang dewasa berhak mendapatkan jeda yang berkualitas.
               </p>
               <p>
-                Di sini, kami tidak hanya menyajikan kafein, tapi juga ketenangan. 
+                Di sini, kami tidak hanya menyajikan kafein, tapi juga ketenangan.
                 Setiap cangkir adalah undangan untuk merenung, bernafas, dan kembali utuh.
               </p>
             </div>

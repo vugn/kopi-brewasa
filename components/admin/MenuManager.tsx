@@ -26,6 +26,9 @@ const MenuManager: React.FC = () => {
         forWhat: ''
     });
 
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
+
     useEffect(() => {
         fetchItems();
     }, []);
@@ -73,6 +76,7 @@ const MenuManager: React.FC = () => {
             tags: item.tags.join(', '),
             forWhat: item.forWhat
         });
+        setSelectedFile(null); // Reset file selection for edit
         // Scroll to top
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -87,51 +91,82 @@ const MenuManager: React.FC = () => {
             tags: '',
             forWhat: ''
         });
+        setSelectedFile(null);
+    };
+
+    const uploadImage = async (file: File) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('menu-images')
+            .upload(filePath, file);
+
+        if (uploadError) {
+            throw uploadError;
+        }
+
+        const { data } = supabase.storage.from('menu-images').getPublicUrl(filePath);
+        return data.publicUrl;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
 
-        const tagsArray = newItem.tags.split(',').map(t => t.trim());
-        const payload = {
-            name: newItem.name,
-            description: newItem.description,
-            price: newItem.price,
-            image: newItem.image || 'https://picsum.photos/400/300',
-            tags: tagsArray,
-            for_what: newItem.forWhat
-        };
+        try {
+            let imageUrl = newItem.image;
 
-        if (editingId) {
-            // UPDATE
-            const { error } = await supabase
-                .from('menu_items')
-                .update(payload)
-                .eq('id', editingId);
+            if (selectedFile) {
+                setUploading(true);
+                imageUrl = await uploadImage(selectedFile);
+                setUploading(false);
+            }
 
-            if (error) {
-                alert('Gagal update menu: ' + error.message);
-            } else {
+            // Using default image if no image provided or uploaded
+            if (!imageUrl) {
+                imageUrl = 'https://picsum.photos/400/300';
+            }
+
+            const tagsArray = newItem.tags.split(',').map(t => t.trim());
+            const payload = {
+                name: newItem.name,
+                description: newItem.description,
+                price: newItem.price,
+                image: imageUrl,
+                tags: tagsArray,
+                for_what: newItem.forWhat
+            };
+
+            if (editingId) {
+                // UPDATE
+                const { error } = await supabase
+                    .from('menu_items')
+                    .update(payload)
+                    .eq('id', editingId);
+
+                if (error) throw error;
                 alert('Menu berhasil diupdate!');
-                handleCancelEdit();
-                fetchItems();
-            }
-        } else {
-            // INSERT
-            const { error } = await supabase
-                .from('menu_items')
-                .insert([payload]);
-
-            if (error) {
-                alert('Gagal menambah menu: ' + error.message);
             } else {
+                // INSERT
+                const { error } = await supabase
+                    .from('menu_items')
+                    .insert([payload]);
+
+                if (error) throw error;
                 alert('Menu berhasil ditambah!');
-                handleCancelEdit();
-                fetchItems();
             }
+
+            handleCancelEdit();
+            fetchItems();
+
+        } catch (error: any) {
+            alert('Error: ' + error.message);
+        } finally {
+            setSubmitting(false);
+            setUploading(false);
         }
-        setSubmitting(false);
     };
 
     return (
@@ -180,12 +215,42 @@ const MenuManager: React.FC = () => {
                         value={newItem.tags}
                         onChange={e => setNewItem({ ...newItem, tags: e.target.value })}
                     />
-                    <input
-                        placeholder="Image URL (Biarkan kosong untuk random)"
-                        className="p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50"
-                        value={newItem.image}
-                        onChange={e => setNewItem({ ...newItem, image: e.target.value })}
-                    />
+                    <div className="md:col-span-2">
+                        <label className="block text-sm text-gray-600 mb-1">Foto Menu</label>
+                        <div className="flex items-center gap-4">
+                            <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors border border-dashed border-gray-300">
+                                <ImageIcon className="w-5 h-5 text-gray-500" />
+                                <span className="text-sm text-gray-600">
+                                    {selectedFile ? selectedFile.name : 'Pilih Foto...'}
+                                </span>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                            setSelectedFile(e.target.files[0]);
+                                        }
+                                    }}
+                                />
+                            </label>
+                            <span className="text-xs text-gray-400">atau</span>
+                            <input
+                                placeholder="Paste Image URL (Opsional)"
+                                className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50 text-sm"
+                                value={newItem.image}
+                                onChange={e => setNewItem({ ...newItem, image: e.target.value })}
+                            />
+                        </div>
+                        {newItem.image && !selectedFile && (
+                            <div className="mt-2 relative w-16 h-16">
+                                <img src={newItem.image} alt="Preview" className="w-full h-full object-cover rounded-lg border" />
+                            </div>
+                        )}
+                        {selectedFile && (
+                            <p className="text-xs text-green-600 mt-1">File terpilih: {selectedFile.name}</p>
+                        )}
+                    </div>
                     <textarea
                         placeholder="Untuk Apa? (Filosofi/Alasan Emotional)"
                         className="p-3 border rounded-lg md:col-span-2 focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50"
@@ -197,7 +262,7 @@ const MenuManager: React.FC = () => {
                         disabled={submitting}
                         className={`text-white p-3 rounded-lg font-bold md:col-span-2 transition-colors disabled:opacity-50 ${editingId ? 'bg-brewasa-copper hover:bg-orange-600' : 'bg-brewasa-dark hover:bg-gray-800'}`}
                     >
-                        {submitting ? 'Menyimpan...' : (editingId ? 'Update Menu' : 'Simpan Menu')}
+                        {submitting || uploading ? 'Menyimpan...' : (editingId ? 'Update Menu' : 'Simpan Menu')}
                     </button>
                 </form>
             </div>

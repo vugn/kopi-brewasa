@@ -64,6 +64,7 @@ const Navbar: React.FC = () => {
         <button
           className="md:hidden"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          aria-label="Toggle mobile menu"
         >
           {isMobileMenuOpen ? (
             <X className={isScrolled ? 'text-brewasa-cream' : 'text-brewasa-dark'} />

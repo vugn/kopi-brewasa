@@ -10,6 +10,10 @@ const Hero: React.FC = () => {
           src="https://picsum.photos/seed/brewasa1/1920/1080"
           alt="Coffee Atmosphere"
           className="w-full h-full object-cover"
+          width="1920"
+          height="1080"
+          loading="eager"
+          fetchPriority="high"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-brewasa-cream/20 via-brewasa-cream/60 to-brewasa-cream"></div>
       </div>
@@ -23,7 +27,7 @@ const Hero: React.FC = () => {
         <p className="text-lg md:text-xl text-brewasa-dark/80 max-w-2xl mx-auto mb-10 font-light">
           Tempat singgah untuk jiwamu yang butuh jeda di tengah riuhnya Banjarmasin.
         </p>
-        
+
         <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
           <a
             href="#menu"
