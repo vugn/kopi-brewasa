@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Trash2, Plus, Image as ImageIcon, Loader2, Pencil, X } from 'lucide-react';
+import { Trash2, Plus, Image as ImageIcon, Loader2, Pencil, X, ChefHat } from 'lucide-react';
 import { MenuItem } from '../../types';
+
+interface Ingredient {
+    id: string;
+    name: string;
+    unit: string;
+    price_per_unit: number;
+}
+
+interface RecipeItem {
+    id: string; // recipe id
+    ingredient_id: string;
+    quantity_required: number;
+    ingredients?: Ingredient; // joined data
+}
 
 // We extend MenuItem for local state but Supabase types might vary slightly
 interface AdminMenuItem extends MenuItem {
@@ -28,6 +42,13 @@ const MenuManager: React.FC = () => {
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
+
+    // Recipe Modal State
+    const [recipeModalOpen, setRecipeModalOpen] = useState(false);
+    const [selectedMenuForRecipe, setSelectedMenuForRecipe] = useState<AdminMenuItem | null>(null);
+    const [recipeItems, setRecipeItems] = useState<RecipeItem[]>([]);
+    const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>([]);
+    const [newRecipeItem, setNewRecipeItem] = useState({ ingredient_id: '', quantity: 0 });
 
     useEffect(() => {
         fetchItems();
@@ -169,6 +190,47 @@ const MenuManager: React.FC = () => {
         }
     };
 
+    // Recipe Logic
+    const openRecipeModal = async (menuItem: AdminMenuItem) => {
+        setSelectedMenuForRecipe(menuItem);
+        setRecipeModalOpen(true);
+
+        // Fetch recipes for this menu
+        const { data: recipes } = await supabase
+            .from('menu_recipes')
+            .select('*, ingredients(*)')
+            .eq('menu_item_id', menuItem.id);
+
+        if (recipes) setRecipeItems(recipes);
+
+        // Fetch ingredients for dropdown
+        const { data: ingredients } = await supabase.from('ingredients').select('*').order('name');
+        if (ingredients) setAvailableIngredients(ingredients);
+    };
+
+    const addIngredientToRecipe = async () => {
+        if (!selectedMenuForRecipe || !newRecipeItem.ingredient_id) return;
+
+        const { error } = await supabase.from('menu_recipes').insert([{
+            menu_item_id: selectedMenuForRecipe.id,
+            ingredient_id: newRecipeItem.ingredient_id,
+            quantity_required: newRecipeItem.quantity
+        }]);
+
+        if (error) alert('Gagal tambah resep');
+        else {
+            // refresh
+            const { data } = await supabase.from('menu_recipes').select('*, ingredients(*)').eq('menu_item_id', selectedMenuForRecipe.id);
+            if (data) setRecipeItems(data);
+            setNewRecipeItem({ ingredient_id: '', quantity: 0 });
+        }
+    };
+
+    const removeIngredientFromRecipe = async (id: string) => {
+        await supabase.from('menu_recipes').delete().eq('id', id);
+        setRecipeItems(recipeItems.filter(r => r.id !== id));
+    };
+
     return (
         <div className="space-y-8">
             <h2 className="text-2xl font-bold text-brewasa-dark">Menu Manager</h2>
@@ -303,6 +365,13 @@ const MenuManager: React.FC = () => {
                                             <Pencil className="w-5 h-5" />
                                         </button>
                                         <button
+                                            onClick={() => openRecipeModal(item)}
+                                            className="text-amber-500 hover:text-amber-700 p-2 hover:bg-amber-50 rounded-lg transition-colors"
+                                            title="Atur Resep (HPP)"
+                                        >
+                                            <ChefHat className="w-5 h-5" />
+                                        </button>
+                                        <button
                                             onClick={() => handleDelete(item.id)}
                                             className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors"
                                             title="Hapus Menu"
@@ -316,8 +385,79 @@ const MenuManager: React.FC = () => {
                     </table>
                 )}
             </div>
+
+            {/* Recipe Modal */}
+            {recipeModalOpen && selectedMenuForRecipe && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl max-w-lg w-full p-6 h-[80vh] flex flex-col">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold">Resep: {selectedMenuForRecipe.name}</h3>
+                            <button onClick={() => setRecipeModalOpen(false)}><X /></button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto mb-4 border rounded-lg p-2">
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="p-2 text-sm">Bahan</th>
+                                        <th className="p-2 text-sm">Qty</th>
+                                        <th className="p-2 text-sm">Cost</th>
+                                        <th className="p-2 text-sm"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {recipeItems.map(r => {
+                                        const cost = r.ingredients ? (r.ingredients.price_per_unit * r.quantity_required) : 0;
+                                        return (
+                                            <tr key={r.id} className="border-b">
+                                                <td className="p-2 text-sm">{r.ingredients?.name}</td>
+                                                <td className="p-2 text-sm">{r.quantity_required} {r.ingredients?.unit}</td>
+                                                <td className="p-2 text-sm text-gray-500">Rp {cost.toLocaleString()}</td>
+                                                <td className="p-2 text-right">
+                                                    <button onClick={() => removeIngredientFromRecipe(r.id)} className="text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                            <h4 className="font-bold text-sm">Tambah Bahan:</h4>
+                            <div className="flex gap-2">
+                                <select
+                                    className="flex-1 p-2 border rounded text-sm"
+                                    value={newRecipeItem.ingredient_id}
+                                    onChange={e => setNewRecipeItem({ ...newRecipeItem, ingredient_id: e.target.value })}
+                                >
+                                    <option value="">Pilih Bahan...</option>
+                                    {availableIngredients.map(i => (
+                                        <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="number"
+                                    className="w-20 p-2 border rounded text-sm"
+                                    placeholder="Qty"
+                                    value={newRecipeItem.quantity || ''}
+                                    onChange={e => setNewRecipeItem({ ...newRecipeItem, quantity: parseFloat(e.target.value) })}
+                                />
+                            </div>
+                            <button
+                                onClick={addIngredientToRecipe}
+                                disabled={!newRecipeItem.ingredient_id || !newRecipeItem.quantity}
+                                className="w-full bg-brewasa-dark text-white py-2 rounded font-bold disabled:opacity-50"
+                            >
+                                + Tambahkan ke Resep
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
+
 
 export default MenuManager;

@@ -6,6 +6,10 @@ import StoryModerator from '../components/admin/StoryModerator';
 import AnnouncementManager from '../components/admin/AnnouncementManager';
 import PosSystem from '../components/admin/PosSystem';
 import TransactionHistory from '../components/admin/TransactionHistory';
+import InventoryManager from '../components/admin/InventoryManager';
+import CostingManager from '../components/admin/CostingManager';
+import ExportManager from '../components/admin/ExportManager';
+import { Package, Calculator } from 'lucide-react';
 
 const Admin: React.FC = () => {
     const [session, setSession] = useState<any>(null);
@@ -141,7 +145,10 @@ const Admin: React.FC = () => {
                         { id: 'history', label: 'Riwayat Transaksi' },
                         { id: 'menu', label: 'Menu Manager' },
                         { id: 'stories', label: 'Story Moderation' },
-                        { id: 'announcements', label: 'Announcements' }
+                        { id: 'announcements', label: 'Announcements' },
+                        { id: 'inventory', label: 'Inventory & Stok' },
+                        { id: 'costing', label: 'HPP & Costing' },
+                        { id: 'exports', label: 'Export Data' }
                     ].map(item => (
                         <button
                             key={item.id}
@@ -180,6 +187,9 @@ const Admin: React.FC = () => {
                 {activeTab === 'menu' && <MenuManager />}
                 {activeTab === 'stories' && <StoryModerator />}
                 {activeTab === 'announcements' && <AnnouncementManager />}
+                {activeTab === 'inventory' && <InventoryManager />}
+                {activeTab === 'costing' && <CostingManager />}
+                {activeTab === 'exports' && <ExportManager />}
             </main>
         </div>
     );

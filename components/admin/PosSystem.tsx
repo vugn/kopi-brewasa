@@ -124,6 +124,10 @@ const PosSystem: React.FC = () => {
             const { error: itemsError } = await supabase.from('transaction_items').insert(itemsPayload);
             if (itemsError) throw itemsError;
 
+            // Trigger Stock Deduction
+            const { error: stockError } = await supabase.rpc('process_transaction_stock', { transaction_uuid: trans.id });
+            if (stockError) console.error("Stock deduction failed:", stockError); // Don't block UI, just log
+
             alert('Transaksi Berhasil!');
             setCart([]);
             setShowPaymentModal(false);
