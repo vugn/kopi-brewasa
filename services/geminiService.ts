@@ -1,12 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
-const ai = new GoogleGenAI({ apiKey });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export const getCoffeeRecommendation = async (
   mood: string,
 ): Promise<string> => {
-  if (!apiKey) {
+  if (!process.env.GEMINI_API_KEY) {
     return "Maaf, Barista AI sedang istirahat (API Key missing). Cobalah 'Latte Jeda' untuk menenangkan pikiran.";
   }
 
