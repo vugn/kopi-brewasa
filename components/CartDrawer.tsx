@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Trash2, Plus, Minus, Coffee, ShoppingBag, MapPin, User, Home } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { trackViewCart, trackBeginCheckout, trackCheckoutWhatsApp, trackAddToCart, trackRemoveFromCart } from '../utils/analytics';
 
 type OrderType = 'dine-in' | 'takeaway' | 'delivery';
 
@@ -23,6 +24,14 @@ const CartDrawer: React.FC = () => {
             alert('Mohon isi alamat pengiriman');
             return;
         }
+
+        // Track checkout via WhatsApp
+        trackCheckoutWhatsApp(
+            items,
+            totalPrice,
+            orderType,
+            orderType === 'delivery' && !!address.trim()
+        );
 
         let message = `Halo Kopi Brewasa! 👋\nSaya mau pesan atas nama *${customerName}*:\n\n`;
 
@@ -49,7 +58,9 @@ const CartDrawer: React.FC = () => {
             {isOpen && (
                 <div
                     className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity"
-                    onClick={toggleCart}
+                    onClick={() => {
+                        toggleCart();
+                    }}
                 />
             )}
 
@@ -125,8 +136,8 @@ const CartDrawer: React.FC = () => {
                                     key={type}
                                     onClick={() => setOrderType(type)}
                                     className={`py-2 px-3 rounded-lg text-xs font-bold uppercase transition-all flex flex-col items-center gap-1 ${orderType === type
-                                            ? 'bg-brewasa-dark text-white shadow-md'
-                                            : 'text-gray-500 hover:bg-gray-200'
+                                        ? 'bg-brewasa-dark text-white shadow-md'
+                                        : 'text-gray-500 hover:bg-gray-200'
                                         }`}
                                 >
                                     {type === 'dine-in' && <Coffee className="w-4 h-4" />}
@@ -147,7 +158,13 @@ const CartDrawer: React.FC = () => {
                                     type="text"
                                     placeholder="Ketik namamu..."
                                     value={customerName}
-                                    onChange={(e) => setCustomerName(e.target.value)}
+                                    onChange={(e) => {
+                                        setCustomerName(e.target.value);
+                                        // Track begin checkout when user starts filling name
+                                        if (e.target.value.length === 1 && items.length > 0) {
+                                            trackBeginCheckout(items, totalPrice, orderType);
+                                        }
+                                    }}
                                     className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50"
                                 />
                             </div>

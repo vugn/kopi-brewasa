@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Coffee, Menu, X } from 'lucide-react';
+import { trackNavigation } from '../utils/analytics';
 
 const Navbar: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -43,6 +44,7 @@ const Navbar: React.FC = () => {
             <a
               key={link.name}
               href={link.href}
+              onClick={() => trackNavigation(link.name)}
               className={`text-sm font-medium tracking-wide hover:text-brewasa-copper transition-colors ${isScrolled ? 'text-brewasa-cream' : 'text-brewasa-dark'
                 }`}
             >
@@ -51,6 +53,7 @@ const Navbar: React.FC = () => {
           ))}
           <a
             href="#menu"
+            onClick={() => trackNavigation('Pesan Sekarang')}
             className={`px-5 py-2 border rounded-full text-sm font-medium transition-all duration-300 ${isScrolled
               ? 'border-brewasa-copper text-brewasa-copper hover:bg-brewasa-copper hover:text-white'
               : 'border-brewasa-dark text-brewasa-dark hover:bg-brewasa-dark hover:text-brewasa-cream'
@@ -82,7 +85,10 @@ const Navbar: React.FC = () => {
               <a
                 key={link.name}
                 href={link.href}
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  trackNavigation(link.name);
+                }}
                 className="text-lg font-medium hover:text-brewasa-copper transition-colors"
               >
                 {link.name}

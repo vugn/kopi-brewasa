@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { Send, MessageCircle } from 'lucide-react';
+import { trackContactFormSubmit } from '../utils/analytics';
 
 const Contact: React.FC = () => {
     const [message, setMessage] = useState('');
 
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
-        const encodedMessage = encodeURIComponent(message || 'Halo Kopi Brewasa, saya mau tanya...');
+        const finalMessage = message || 'Halo Kopi Brewasa, saya mau tanya...';
+
+        // Track contact form submission
+        trackContactFormSubmit(finalMessage.length);
+
+        const encodedMessage = encodeURIComponent(finalMessage);
         window.open(`https://wa.me/6281373388605?text=${encodedMessage}`, '_blank');
     };
 

@@ -1,74 +1,128 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo-icon.png" />
-    <title>Kopi Brewasa - Coffee Shop Terbaik di Banjarmasin | Tempat Nongkrong & Melamun</title>
-    <meta name="description" content="Kopi Brewasa: Pilihan utama kopi di Banjarmasin. Nikmati Butter Bliss, Aren Latte, dan suasana cozy untuk 'me time'. Lokasi di Surgi Mufti, Banjarmasin Utara." />
-    <meta name="keywords" content="kopi banjarmasin, cafe banjarmasin, tempat nongkrong banjarmasin, coffee shop banjarmasin, kopi enak, brewasa, butter latte banjarmasin" />
+
+    <!-- Google Analytics 4 -->
+    <script>
+      // Only load GA if Measurement ID is present
+      window.GA_MEASUREMENT_ID = "%VITE_GA_MEASUREMENT_ID%";
+      if (
+        window.GA_MEASUREMENT_ID &&
+        window.GA_MEASUREMENT_ID !== "%" + "VITE_GA_MEASUREMENT_ID" + "%"
+      ) {
+        // Create script element for gtag.js
+        var script = document.createElement("script");
+        script.async = true;
+        script.src =
+          "https://www.googletagmanager.com/gtag/js?id=" +
+          window.GA_MEASUREMENT_ID;
+        document.head.appendChild(script);
+
+        // Initialize dataLayer and gtag
+        window.dataLayer = window.dataLayer || [];
+        function gtag() {
+          dataLayer.push(arguments);
+        }
+        window.gtag = gtag;
+        gtag("js", new Date());
+        gtag("config", window.GA_MEASUREMENT_ID, {
+          send_page_view: true,
+          cookie_flags: "SameSite=None;Secure",
+        });
+      }
+    </script>
+    <title>
+      Kopi Brewasa - Coffee Shop Terbaik di Banjarmasin | Tempat Nongkrong &
+      Melamun
+    </title>
+    <meta
+      name="description"
+      content="Kopi Brewasa: Pilihan utama kopi di Banjarmasin. Nikmati Butter Bliss, Aren Latte, dan suasana cozy untuk 'me time'. Lokasi di Surgi Mufti, Banjarmasin Utara."
+    />
+    <meta
+      name="keywords"
+      content="kopi banjarmasin, cafe banjarmasin, tempat nongkrong banjarmasin, coffee shop banjarmasin, kopi enak, brewasa, butter latte banjarmasin"
+    />
     <meta name="author" content="Kopi Brewasa" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preload" as="image" href="https://picsum.photos/seed/brewasa1/1920/1080" fetchpriority="high">
-    
+    <link
+      rel="preload"
+      as="image"
+      href="https://picsum.photos/seed/brewasa1/1920/1080"
+      fetchpriority="high"
+    />
+
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://brewasa.com/" />
-    <meta property="og:title" content="Kopi Brewasa - Menyeduh Rasa, Bukan Cuma Kopi" />
-    <meta property="og:description" content="Tempat singgah untuk jiwamu yang butuh jeda. Nikmati kopi terbaik di Banjarmasin. Signature: Butter Bliss & Aren Latte." />
+    <meta
+      property="og:title"
+      content="Kopi Brewasa - Menyeduh Rasa, Bukan Cuma Kopi"
+    />
+    <meta
+      property="og:description"
+      content="Tempat singgah untuk jiwamu yang butuh jeda. Nikmati kopi terbaik di Banjarmasin. Signature: Butter Bliss & Aren Latte."
+    />
     <meta property="og:image" content="/og-image.png" />
     <meta property="og:locale" content="id_ID" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content="https://brewasa.com/" />
-    <meta property="twitter:title" content="Kopi Brewasa - Menyeduh Rasa, Bukan Cuma Kopi" />
-    <meta property="twitter:description" content="Tempat singgah untuk jiwamu yang butuh jeda. Nikmati kopi terbaik di Banjarmasin." />
+    <meta
+      property="twitter:title"
+      content="Kopi Brewasa - Menyeduh Rasa, Bukan Cuma Kopi"
+    />
+    <meta
+      property="twitter:description"
+      content="Tempat singgah untuk jiwamu yang butuh jeda. Nikmati kopi terbaik di Banjarmasin."
+    />
     <meta property="twitter:image" content="/og-image.png" />
 
     <!-- JSON-LD Structured Data -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "CafeOrCoffeeShop",
-      "name": "Kopi Brewasa",
-      "image": "/og-image.png",
-      "@id": "https://brewasa.com",
-      "url": "https://brewasa.com",
-      "telephone": "+6281373388605",
-      "priceRange": "$$",
-      "address": {
-        "@type": "PostalAddress",
-        "streetAddress": "Jl. Jalur I No.5, Surgi Mufti",
-        "addressLocality": "Banjarmasin Utara",
-        "addressRegion": "Kalimantan Selatan",
-        "postalCode": "70122",
-        "addressCountry": "ID"
-      },
-      "geo": {
-        "@type": "GeoCoordinates",
-        "latitude": -3.300907,
-        "longitude": 114.603446
-      },
-      "openingHoursSpecification": {
-        "@type": "OpeningHoursSpecification",
-        "dayOfWeek": [
-          "Monday",
-          "Tuesday",
-          "Wednesday",
-          "Thursday",
-          "Friday",
-          "Saturday",
-          "Sunday"
-        ],
-        "opens": "10:00",
-        "closes": "23:00"
-      },
-      "sameAs": [
-        "https://www.instagram.com/kopibrewasa"
-      ]
-    }
+      {
+        "@context": "https://schema.org",
+        "@type": "CafeOrCoffeeShop",
+        "name": "Kopi Brewasa",
+        "image": "/og-image.png",
+        "@id": "https://brewasa.com",
+        "url": "https://brewasa.com",
+        "telephone": "+6281373388605",
+        "priceRange": "$$",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Jl. Jalur I No.5, Surgi Mufti",
+          "addressLocality": "Banjarmasin Utara",
+          "addressRegion": "Kalimantan Selatan",
+          "postalCode": "70122",
+          "addressCountry": "ID"
+        },
+        "geo": {
+          "@type": "GeoCoordinates",
+          "latitude": -3.300907,
+          "longitude": 114.603446
+        },
+        "openingHoursSpecification": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "10:00",
+          "closes": "23:00"
+        },
+        "sameAs": ["https://www.instagram.com/kopibrewasa"]
+      }
     </script>
-    
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -76,41 +130,44 @@
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Poppins', 'sans-serif'],
+              sans: ["Poppins", "sans-serif"],
             },
             colors: {
               brewasa: {
-                dark: '#4E342E',
-                cream: '#F7E9D3',
-                copper: '#E57300',
-              }
-            }
-          }
-        }
-      }
+                dark: "#4E342E",
+                cream: "#F7E9D3",
+                copper: "#E57300",
+              },
+            },
+          },
+        },
+      };
     </script>
 
     <!-- Google Fonts: Poppins -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&display=swap"
+      rel="stylesheet"
+    />
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Poppins', 'sans-serif'],
+              sans: ["Poppins", "sans-serif"],
             },
             colors: {
               brewasa: {
-                dark: '#4E342E',
-                cream: '#F7E9D3',
-                copper: '#E57300',
-              }
-            }
-          }
-        }
-      }
+                dark: "#4E342E",
+                cream: "#F7E9D3",
+                copper: "#E57300",
+              },
+            },
+          },
+        },
+      };
     </script>
     <style>
       /* Smooth scrolling for anchor links */
@@ -118,32 +175,32 @@
         scroll-behavior: smooth;
       }
       body {
-        background-color: #F7E9D3;
-        color: #4E342E;
+        background-color: #f7e9d3;
+        color: #4e342e;
       }
       .scrollbar-hide::-webkit-scrollbar {
-          display: none;
+        display: none;
       }
       .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
+        -ms-overflow-style: none;
+        scrollbar-width: none;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "lucide-react": "https://esm.sh/lucide-react@^0.560.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
-    "react/": "https://esm.sh/react@^19.2.1/",
-    "react": "https://esm.sh/react@^19.2.1",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.1/"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+    <script type="importmap">
+      {
+        "imports": {
+          "lucide-react": "https://esm.sh/lucide-react@^0.560.0",
+          "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+          "react/": "https://esm.sh/react@^19.2.1/",
+          "react": "https://esm.sh/react@^19.2.1",
+          "react-dom/": "https://esm.sh/react-dom@^19.2.1/"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

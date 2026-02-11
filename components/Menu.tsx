@@ -3,6 +3,7 @@ import { MenuItem } from '../types';
 import { useCart } from '../context/CartContext';
 import { Plus, Minus, ShoppingBag } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { trackAddToCart, trackRemoveFromCart } from '../utils/analytics';
 
 const Menu: React.FC = () => {
   const { items, addToCart, decreaseQuantity } = useCart();
@@ -103,7 +104,10 @@ const Menu: React.FC = () => {
                     <div className="mt-auto space-y-6">
                       {qty === 0 ? (
                         <button
-                          onClick={() => addToCart(item)}
+                          onClick={() => {
+                            addToCart(item);
+                            trackAddToCart(item, 1);
+                          }}
                           className="w-full py-3 rounded-xl bg-brewasa-dark text-white font-bold hover:bg-brewasa-copper transition-all duration-300 flex items-center justify-center gap-2 group-hover:shadow-lg"
                         >
                           <ShoppingBag className="w-4 h-4" />
@@ -112,14 +116,20 @@ const Menu: React.FC = () => {
                       ) : (
                         <div className="flex items-center justify-between bg-gray-50 rounded-xl p-1 border border-gray-100">
                           <button
-                            onClick={() => decreaseQuantity(item.id)}
+                            onClick={() => {
+                              decreaseQuantity(item.id);
+                              trackRemoveFromCart(item, 1);
+                            }}
                             className="w-10 h-10 flex items-center justify-center rounded-lg bg-white shadow-sm hover:bg-red-50 hover:text-red-500 transition-colors"
                           >
                             <Minus className="w-4 h-4" />
                           </button>
                           <span className="font-bold text-brewasa-dark">{qty}</span>
                           <button
-                            onClick={() => addToCart(item)}
+                            onClick={() => {
+                              addToCart(item);
+                              trackAddToCart(item, 1);
+                            }}
                             className="w-10 h-10 flex items-center justify-center rounded-lg bg-brewasa-dark text-white shadow-sm hover:bg-brewasa-copper transition-colors"
                           >
                             <Plus className="w-4 h-4" />
