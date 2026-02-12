@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Search, Filter, Loader2, Calendar, User, ShoppingBag, Clock, CheckCircle, XCircle, AlertCircle, Download, TrendingUp, DollarSign } from 'lucide-react';
+import { Search, Filter, Loader2, Calendar, User, ShoppingBag, Clock, CheckCircle, XCircle, AlertCircle, Download, TrendingUp, DollarSign, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface Transaction {
@@ -16,6 +16,7 @@ interface Transaction {
     customer_name?: string;
     order_type?: string;
     items?: TransactionItem[];
+    transaction_items?: TransactionItem[];
 }
 
 interface TransactionItem {
@@ -30,7 +31,7 @@ const TransactionHistory: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterDate, setFilterDate] = useState({ start: '', end: '' }); // NEW
-    const [stats, setStats] = useState({ daily: 0, weekly: 0, monthly: 0 });
+    const [stats, setStats] = useState({ daily: 0, weekly: 0, monthly: 0, totalCups: 0 });
 
     useEffect(() => {
         fetchTransactions();
@@ -81,6 +82,7 @@ const TransactionHistory: React.FC = () => {
         let daily = 0;
         let weekly = 0;
         let monthly = 0;
+        let totalCups = 0;
 
         data.forEach(t => {
             // Only count completed transactions for revenue
@@ -96,25 +98,70 @@ const TransactionHistory: React.FC = () => {
 
             // Monthly
             if (tDate >= startOfMonth) monthly += t.total_amount;
+
+            // Total Cups
+            // Total Cups
+            if (t.transaction_items) {
+                totalCups += t.transaction_items.reduce((acc, item) => acc + item.quantity, 0);
+            } else if (t.items) {
+                totalCups += t.items.reduce((acc, item) => acc + item.quantity, 0);
+            }
         });
 
-        setStats({ daily, weekly, monthly });
+        setStats({ daily, weekly, monthly, totalCups });
     };
 
     const updateStatus = async (id: string, newStatus: string) => {
-        const { error } = await supabase
-            .from('transactions')
-            .update({ status: newStatus })
-            .eq('id', id);
+        // Optimistic update
+        const originalTransactions = [...transactions];
+        setTransactions(transactions.map(t =>
+            t.id === id ? { ...t, status: newStatus } : t
+        ));
+
+        try {
+            const { data, error } = await supabase
+                .from('transactions')
+                .update({ status: newStatus })
+                .eq('id', id)
+                .select();
+
+            if (error) throw error;
+
+            if (!data || data.length === 0) {
+                throw new Error('Transaction not found or update failed.');
+            }
+
+            // Optional: Update with server data to be sure
+            const updatedTransaction = data[0];
+            setTransactions(prev => prev.map(t =>
+                t.id === id ? { ...t, status: updatedTransaction.status } : t
+            ));
+
+            // Recalculate stats based on the verified new state
+            calculateStats(transactions.map(t => t.id === id ? { ...t, status: newStatus } : t));
+
+        } catch (err: any) {
+            console.error('Failed to update status:', err);
+            alert('Gagal update status: ' + err.message);
+            // Revert optimistic update
+            setTransactions(originalTransactions);
+        }
+    };
+
+    const deleteTransaction = async (id: string) => {
+        if (!window.confirm('Apakah Anda yakin ingin menghapus transaksi ini? Tindakan ini tidak dapat dibatalkan.')) return;
+
+        // Use RPC to delete and restore stock
+        const { error } = await supabase.rpc('delete_transaction_with_restore', { transaction_uuid: id });
 
         if (error) {
-            alert('Gagal update status: ' + error.message);
+            console.error("Delete failed:", error);
+            alert('Gagal menghapus transaksi: ' + error.message);
         } else {
-            const updated = transactions.map(t =>
-                t.id === id ? { ...t, status: newStatus } : t
-            );
+            const updated = transactions.filter(t => t.id !== id);
             setTransactions(updated);
-            calculateStats(updated); // Recalculate stats as status might have changed to/from COMPLETED
+            calculateStats(updated);
+            alert('Transaksi berhasil dihapus dan stok dikembalikan.');
         }
     };
 
@@ -206,6 +253,15 @@ const TransactionHistory: React.FC = () => {
                     </div>
                     <div className="p-3 bg-purple-50 rounded-xl text-purple-600">
                         <Calendar className="w-6 h-6" />
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                    <div>
+                        <p className="text-sm text-gray-500 font-medium mb-1">Total Cup Terjual</p>
+                        <h3 className="text-2xl font-bold text-brewasa-dark">{stats.totalCups} Cups</h3>
+                    </div>
+                    <div className="p-3 bg-orange-50 rounded-xl text-orange-600">
+                        <ShoppingBag className="w-6 h-6" />
                     </div>
                 </div>
             </div>
@@ -367,13 +423,20 @@ const TransactionHistory: React.FC = () => {
                                                     <select
                                                         value={t.status}
                                                         onChange={(e) => updateStatus(t.id, e.target.value)}
-                                                        className="text-xs border rounded px-1 py-0.5 bg-white hover:border-brewasa-copper cursor-pointer outline-none"
+                                                        className="text-xs border rounded px-1 py-0.5 bg-white hover:border-brewasa-copper cursor-pointer outline-none mb-1"
                                                     >
                                                         <option value="PENDING">PENDING</option>
                                                         <option value="PROCESSING">PROCESSING</option>
                                                         <option value="COMPLETED">COMPLETED</option>
                                                         <option value="CANCELLED">CANCELLED</option>
                                                     </select>
+                                                    <button
+                                                        onClick={() => deleteTransaction(t.id)}
+                                                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
+                                                        title="Hapus Transaksi"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
