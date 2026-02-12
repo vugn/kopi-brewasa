@@ -22,6 +22,11 @@ const PosSystem: React.FC = () => {
     const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKE_AWAY' | 'DELIVERY'>('DINE_IN');
     const [cashGiven, setCashGiven] = useState('');
     const [customerName, setCustomerName] = useState('');
+
+    // Voucher State
+    const [voucherCode, setVoucherCode] = useState('');
+    const [voucherNotes, setVoucherNotes] = useState('');
+    const [discountAmount, setDiscountAmount] = useState('');
     const [processing, setProcessing] = useState(false);
 
     useEffect(() => {
@@ -69,9 +74,13 @@ const PosSystem: React.FC = () => {
         item.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
+    // Discount & Final Total Calculation
+    const discountNum = parseInt(discountAmount.replace(/\./g, '')) || 0;
+    const finalTotal = Math.max(0, totalAmount - discountNum);
+
     // Smart Change Logic
     const cashGivenNum = parseInt(cashGiven.replace(/\./g, '')) || 0;
-    const change = cashGivenNum - totalAmount;
+    const change = cashGivenNum - finalTotal;
 
     const getSmartChangeSuggestion = () => {
         if (change < 0) return null;
@@ -101,11 +110,15 @@ const PosSystem: React.FC = () => {
             const { data: trans, error: transError } = await supabase
                 .from('transactions')
                 .insert([{
-                    total_amount: totalAmount,
+                    total_amount: finalTotal,
+                    subtotal: totalAmount,
+                    discount_amount: discountNum,
                     payment_method: paymentMethod,
                     order_type: orderType,
                     status: 'PENDING',
                     customer_name: customerName,
+                    voucher_code: voucherCode || null,
+                    voucher_notes: voucherNotes || null,
                     created_at: new Date().toISOString()
                 }])
                 .select()
@@ -134,6 +147,9 @@ const PosSystem: React.FC = () => {
             setIsCartOpen(false); // Close mobile cart if open
             setCashGiven('');
             setCustomerName('');
+            setVoucherCode('');
+            setVoucherNotes('');
+            setDiscountAmount('');
         } catch (err: any) {
             alert('Gagal memproses transaksi: ' + err.message);
         } finally {
@@ -317,6 +333,60 @@ const PosSystem: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* Voucher Section */}
+                            <div className="space-y-4 border-t pt-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                                        Kode Voucher (Opsional)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brewasa-copper focus:outline-none uppercase"
+                                        placeholder="Contoh: PROMO20"
+                                        value={voucherCode}
+                                        onChange={e => setVoucherCode(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+
+                                {voucherCode && (
+                                    <>
+                                        <div className="animate-fadeIn">
+                                            <label className="block text-sm font-bold text-gray-700 mb-2">
+                                                Catatan Voucher
+                                            </label>
+                                            <textarea
+                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50 resize-none h-16"
+                                                placeholder="Contoh: Voucher dari event Instagram"
+                                                value={voucherNotes}
+                                                onChange={e => setVoucherNotes(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="animate-fadeIn">
+                                            <label className="block text-sm font-bold text-gray-700 mb-2">
+                                                Nilai Diskon (Opsional)
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">Rp</span>
+                                                <input
+                                                    type="number"
+                                                    inputMode="numeric"
+                                                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-mono focus:ring-2 focus:ring-brewasa-copper focus:outline-none"
+                                                    placeholder="0"
+                                                    value={discountAmount}
+                                                    onChange={e => setDiscountAmount(e.target.value)}
+                                                />
+                                            </div>
+                                            {discountNum > 0 && (
+                                                <p className="text-xs text-green-600 mt-1 font-medium">
+                                                    💰 Diskon: Rp {formatNumber(discountNum)}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
                             {/* Cash Input */}
                             {paymentMethod === 'CASH' && (
                                 <div className="space-y-4">
@@ -337,15 +407,32 @@ const PosSystem: React.FC = () => {
 
                                     <div className="bg-gray-50 p-4 rounded-xl space-y-2">
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-gray-600">Total Tagihan</span>
+                                            <span className="text-gray-600">Subtotal</span>
                                             <span className="font-bold">Rp {formatNumber(totalAmount)}</span>
                                         </div>
+
+                                        {discountNum > 0 && (
+                                            <div className="flex justify-between text-sm text-green-600">
+                                                <span>Diskon Voucher</span>
+                                                <span className="font-bold">- Rp {formatNumber(discountNum)}</span>
+                                            </div>
+                                        )}
+
                                         <div className="flex justify-between items-center pt-2 border-t border-gray-200">
-                                            <span className="text-gray-800 font-medium">Kembalian</span>
-                                            <span className={`text-xl font-bold font-mono ${change < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                                                Rp {change < 0 ? '-' : formatNumber(change)}
+                                            <span className="text-gray-800 font-bold">Total Bayar</span>
+                                            <span className="text-xl font-bold font-mono text-brewasa-dark">
+                                                Rp {formatNumber(finalTotal)}
                                             </span>
                                         </div>
+
+                                        {cashGiven && (
+                                            <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                                                <span className="text-gray-800 font-medium">Kembalian</span>
+                                                <span className={`text-xl font-bold font-mono ${change < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                                    Rp {change < 0 ? '-' : formatNumber(change)}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Smart Change Suggestion */}
@@ -373,7 +460,7 @@ const PosSystem: React.FC = () => {
                                 disabled={processing || (paymentMethod === 'CASH' && change < 0)}
                                 className="w-full py-4 bg-brewasa-dark text-white rounded-xl font-bold text-lg hover:bg-brewasa-copper transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                             >
-                                {processing ? 'Memproses...' : `Selesaikan (Rp ${formatNumber(totalAmount)})`}
+                                {processing ? 'Memproses...' : `Selesaikan (Rp ${formatNumber(finalTotal)})`}
                             </button>
                         </div>
                     </div>

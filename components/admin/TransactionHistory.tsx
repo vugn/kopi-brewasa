@@ -7,6 +7,10 @@ interface Transaction {
     id: string;
     created_at: string;
     total_amount: number;
+    subtotal?: number;
+    discount_amount?: number;
+    voucher_code?: string;
+    voucher_notes?: string;
     payment_method: string;
     status: string;
     customer_name?: string;
@@ -44,6 +48,10 @@ const TransactionHistory: React.FC = () => {
             .select(`
                 *,
                 order_type,
+                voucher_code,
+                voucher_notes,
+                discount_amount,
+                subtotal,
                 transaction_items (
                     id, item_name, quantity, price
                 )
@@ -118,6 +126,10 @@ const TransactionHistory: React.FC = () => {
             Customer: t.customer_name || 'Anonymous',
             Type: t.order_type || 'N/A',
             Items: t.items?.map(i => `${i.quantity}x ${i.item_name}`).join(', '),
+            Subtotal: t.subtotal || t.total_amount,
+            Voucher_Code: t.voucher_code || '-',
+            Voucher_Notes: t.voucher_notes || '-',
+            Discount: t.discount_amount || 0,
             Total: t.total_amount,
             Method: t.payment_method,
             Status: t.status
@@ -213,8 +225,8 @@ const TransactionHistory: React.FC = () => {
                                     key={s}
                                     onClick={() => setFilterStatus(s)}
                                     className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors whitespace-nowrap ${filterStatus === s
-                                            ? 'bg-brewasa-dark text-white'
-                                            : 'text-gray-500 hover:bg-gray-50'
+                                        ? 'bg-brewasa-dark text-white'
+                                        : 'text-gray-500 hover:bg-gray-50'
                                         }`}
                                 >
                                     {s === 'ALL' ? 'Semua' : s}
@@ -270,6 +282,8 @@ const TransactionHistory: React.FC = () => {
                                     <th className="p-4 font-semibold text-gray-600">Customer</th>
                                     <th className="p-4 font-semibold text-gray-600">Type</th>
                                     <th className="p-4 font-semibold text-gray-600">Items</th>
+                                    <th className="p-4 font-semibold text-gray-600 text-center">Voucher</th>
+                                    <th className="p-4 font-semibold text-gray-600 text-right">Diskon</th>
                                     <th className="p-4 font-semibold text-gray-600 text-right">Total</th>
                                     <th className="p-4 font-semibold text-gray-600 text-center">Metode</th>
                                     <th className="p-4 font-semibold text-gray-600 text-center">Status</th>
@@ -277,80 +291,111 @@ const TransactionHistory: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {filtered.length === 0 && (
-                                    <tr><td colSpan={7} className="p-8 text-center text-gray-400">Tidak ada data transaksi.</td></tr>
+                                    <tr><td colSpan={9} className="p-8 text-center text-gray-400">Tidak ada data transaksi.</td></tr>
                                 )}
                                 {filtered.map(t => (
-                                    <tr key={t.id} className="hover:bg-gray-50/50 transition-colors">
-                                        <td className="p-4">
-                                            <div className="font-mono text-xs text-gray-400">#{t.id.slice(0, 8)}</div>
-                                            <div className="text-sm font-medium text-gray-700 flex items-center gap-1 mt-1">
-                                                <Calendar className="w-3 h-3" />
-                                                {new Date(t.created_at).toLocaleDateString('id-ID')}
-                                                <div className="hidden sm:flex items-center gap-1">
-                                                    <Clock className="w-3 h-3 ml-2" />
-                                                    {new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                    <React.Fragment key={t.id}>
+                                        <tr className="hover:bg-gray-50/50 transition-colors">
+                                            <td className="p-4">
+                                                <div className="font-mono text-xs text-gray-400">#{t.id.slice(0, 8)}</div>
+                                                <div className="text-sm font-medium text-gray-700 flex items-center gap-1 mt-1">
+                                                    <Calendar className="w-3 h-3" />
+                                                    {new Date(t.created_at).toLocaleDateString('id-ID')}
+                                                    <div className="hidden sm:flex items-center gap-1">
+                                                        <Clock className="w-3 h-3 ml-2" />
+                                                        {new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-full bg-brewasa-cream/50 flex items-center justify-center text-brewasa-dark font-bold text-xs border border-brewasa-cream shrink-0">
-                                                    <User className="w-4 h-4" />
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 rounded-full bg-brewasa-cream/50 flex items-center justify-center text-brewasa-dark font-bold text-xs border border-brewasa-cream shrink-0">
+                                                        <User className="w-4 h-4" />
+                                                    </div>
+                                                    <span className="font-medium text-gray-800 line-clamp-1">{t.customer_name || 'Tanpa Nama'}</span>
                                                 </div>
-                                                <span className="font-medium text-gray-800 line-clamp-1">{t.customer_name || 'Tanpa Nama'}</span>
-                                            </div>
-                                        </td>
-                                        <td className="p-4">
-                                            <span className="px-2 py-1 rounded text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 whitespace-nowrap">
-                                                {t.order_type?.replace('_', ' ') || 'DINE IN'}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 max-w-xs min-w-[200px]">
-                                            <div className="flex flex-wrap gap-1">
-                                                {/* @ts-ignore */}
-                                                {t.transaction_items?.map((i, idx) => (
-                                                    <span key={idx} className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs text-gray-600">
-                                                        <span className="font-bold">{i.quantity}x</span> {i.item_name}
+                                            </td>
+                                            <td className="p-4">
+                                                <span className="px-2 py-1 rounded text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 whitespace-nowrap">
+                                                    {t.order_type?.replace('_', ' ') || 'DINE IN'}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 max-w-xs min-w-[200px]">
+                                                <div className="flex flex-wrap gap-1">
+                                                    {/* @ts-ignore */}
+                                                    {t.transaction_items?.map((i, idx) => (
+                                                        <span key={idx} className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs text-gray-600">
+                                                            <span className="font-bold">{i.quantity}x</span> {i.item_name}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                {t.voucher_code ? (
+                                                    <span className="px-2 py-1 rounded text-xs font-mono font-bold border bg-yellow-50 text-yellow-700 border-yellow-200">
+                                                        {t.voucher_code}
                                                     </span>
-                                                ))}
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-right font-bold text-brewasa-dark whitespace-nowrap">
-                                            Rp {t.total_amount.toLocaleString('id-ID')}
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            <span className="px-2 py-1 rounded text-xs font-bold border bg-gray-50 text-gray-600 border-gray-200">
-                                                {t.payment_method}
-                                            </span>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="flex flex-col items-center gap-2">
-                                                <div className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1 ${getStatusColor(t.status)}`}>
-                                                    {t.status === 'COMPLETED' && <CheckCircle className="w-3 h-3" />}
-                                                    {t.status === 'CANCELLED' && <XCircle className="w-3 h-3" />}
-                                                    {t.status === 'PENDING' && <AlertCircle className="w-3 h-3" />}
-                                                    {t.status}
+                                                ) : (
+                                                    <span className="text-gray-400 text-xs">-</span>
+                                                )}
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                {t.discount_amount && t.discount_amount > 0 ? (
+                                                    <span className="font-bold text-green-600 whitespace-nowrap">
+                                                        - Rp {t.discount_amount.toLocaleString('id-ID')}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 text-xs">-</span>
+                                                )}
+                                            </td>
+                                            <td className="p-4 text-right font-bold text-brewasa-dark whitespace-nowrap">
+                                                Rp {t.total_amount.toLocaleString('id-ID')}
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <span className="px-2 py-1 rounded text-xs font-bold border bg-gray-50 text-gray-600 border-gray-200">
+                                                    {t.payment_method}
+                                                </span>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <div className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1 ${getStatusColor(t.status)}`}>
+                                                        {t.status === 'COMPLETED' && <CheckCircle className="w-3 h-3" />}
+                                                        {t.status === 'CANCELLED' && <XCircle className="w-3 h-3" />}
+                                                        {t.status === 'PENDING' && <AlertCircle className="w-3 h-3" />}
+                                                        {t.status}
+                                                    </div>
+                                                    <select
+                                                        value={t.status}
+                                                        onChange={(e) => updateStatus(t.id, e.target.value)}
+                                                        className="text-xs border rounded px-1 py-0.5 bg-white hover:border-brewasa-copper cursor-pointer outline-none"
+                                                    >
+                                                        <option value="PENDING">PENDING</option>
+                                                        <option value="PROCESSING">PROCESSING</option>
+                                                        <option value="COMPLETED">COMPLETED</option>
+                                                        <option value="CANCELLED">CANCELLED</option>
+                                                    </select>
                                                 </div>
-                                                <select
-                                                    value={t.status}
-                                                    onChange={(e) => updateStatus(t.id, e.target.value)}
-                                                    className="text-xs border rounded px-1 py-0.5 bg-white hover:border-brewasa-copper cursor-pointer outline-none"
-                                                >
-                                                    <option value="PENDING">PENDING</option>
-                                                    <option value="PROCESSING">PROCESSING</option>
-                                                    <option value="COMPLETED">COMPLETED</option>
-                                                    <option value="CANCELLED">CANCELLED</option>
-                                                </select>
-                                            </div>
-                                        </td>
-                                    </tr>
+                                            </td>
+                                        </tr>
+                                        {/* Voucher Notes Row (jika ada notes) */}
+                                        {t.voucher_notes && (
+                                            <tr className="bg-yellow-50/30 border-t border-yellow-100">
+                                                <td colSpan={9} className="p-3">
+                                                    <div className="bg-yellow-50 rounded-lg border border-yellow-200 p-3">
+                                                        <p className="text-xs font-bold text-yellow-800 mb-1">📝 Catatan Voucher:</p>
+                                                        <p className="text-xs text-yellow-700">{t.voucher_notes}</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 };
 
