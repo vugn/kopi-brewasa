@@ -6,6 +6,8 @@ export interface MenuItem {
   tags: string[];
   image: string;
   forWhat: string;
+  category?: "MAIN" | "ADDON" | "SPECIAL";
+  is_available?: boolean;
 }
 
 export interface SpotifyTrack {

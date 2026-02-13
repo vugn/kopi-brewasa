@@ -30,8 +30,14 @@ const TransactionHistory: React.FC = () => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('ALL');
-    const [filterDate, setFilterDate] = useState({ start: '', end: '' }); // NEW
-    const [stats, setStats] = useState({ daily: 0, weekly: 0, monthly: 0, totalCups: 0 });
+    const [filterPayment, setFilterPayment] = useState('ALL'); // NEW
+    const [filterVoucher, setFilterVoucher] = useState<'ALL' | 'WITH_VOUCHER' | 'NO_VOUCHER'>('ALL'); // NEW
+    const [filterDate, setFilterDate] = useState({ start: '', end: '' });
+    const [stats, setStats] = useState({
+        daily: 0, weekly: 0, monthly: 0,
+        dailyCups: 0, weeklyCups: 0, monthlyCups: 0,
+        totalCups: 0
+    });
 
     useEffect(() => {
         fetchTransactions();
@@ -79,36 +85,53 @@ const TransactionHistory: React.FC = () => {
         startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday as start
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+
+
         let daily = 0;
         let weekly = 0;
         let monthly = 0;
+        let dailyCups = 0;
+        let weeklyCups = 0;
+        let monthlyCups = 0;
         let totalCups = 0;
 
         data.forEach(t => {
-            // Only count completed transactions for revenue
+            // Only count completed transactions for stats
             if (t.status !== 'COMPLETED') return;
 
             const tDate = new Date(t.created_at);
 
+            // Calculate cups for this transaction
+            let cupsInTransaction = 0;
+            if (t.transaction_items) {
+                cupsInTransaction = t.transaction_items.reduce((acc, item) => acc + item.quantity, 0);
+            } else if (t.items) {
+                cupsInTransaction = t.items.reduce((acc, item) => acc + item.quantity, 0);
+            }
+
             // Daily
-            if (tDate >= today) daily += t.total_amount;
+            if (tDate >= today) {
+                daily += t.total_amount;
+                dailyCups += cupsInTransaction;
+            }
 
             // Weekly
-            if (tDate >= startOfWeek) weekly += t.total_amount;
+            if (tDate >= startOfWeek) {
+                weekly += t.total_amount;
+                weeklyCups += cupsInTransaction;
+            }
 
             // Monthly
-            if (tDate >= startOfMonth) monthly += t.total_amount;
-
-            // Total Cups
-            // Total Cups
-            if (t.transaction_items) {
-                totalCups += t.transaction_items.reduce((acc, item) => acc + item.quantity, 0);
-            } else if (t.items) {
-                totalCups += t.items.reduce((acc, item) => acc + item.quantity, 0);
+            if (tDate >= startOfMonth) {
+                monthly += t.total_amount;
+                monthlyCups += cupsInTransaction;
             }
+
+            // Total All Time
+            totalCups += cupsInTransaction;
         });
 
-        setStats({ daily, weekly, monthly, totalCups });
+        setStats({ daily, weekly, monthly, dailyCups, weeklyCups, monthlyCups, totalCups });
     };
 
     const updateStatus = async (id: string, newStatus: string) => {
@@ -200,6 +223,10 @@ const TransactionHistory: React.FC = () => {
 
     const filtered = transactions.filter(t => {
         const matchesStatus = filterStatus === 'ALL' || t.status === filterStatus;
+        const matchesPayment = filterPayment === 'ALL' || t.payment_method === filterPayment;
+        const matchesVoucher = filterVoucher === 'ALL' ||
+            (filterVoucher === 'WITH_VOUCHER' && !!t.voucher_code) ||
+            (filterVoucher === 'NO_VOUCHER' && !t.voucher_code);
 
         // Date Filtering
         let matchesDate = true;
@@ -221,17 +248,19 @@ const TransactionHistory: React.FC = () => {
             matchesDate = matchesDate && tDate <= end;
         }
 
-        return matchesStatus && matchesDate;
+        return matchesStatus && matchesDate && matchesPayment && matchesVoucher;
     });
 
     return (
         <div className="space-y-6">
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
                     <div>
                         <p className="text-sm text-gray-500 font-medium mb-1">Penjualan Hari Ini</p>
                         <h3 className="text-2xl font-bold text-brewasa-dark">Rp {stats.daily.toLocaleString('id-ID')}</h3>
+                        <p className="text-xs text-gray-400 mt-1 font-medium">{stats.dailyCups} Cup Terjual</p>
                     </div>
                     <div className="p-3 bg-green-50 rounded-xl text-green-600">
                         <DollarSign className="w-6 h-6" />
@@ -241,6 +270,7 @@ const TransactionHistory: React.FC = () => {
                     <div>
                         <p className="text-sm text-gray-500 font-medium mb-1">Minggu Ini</p>
                         <h3 className="text-2xl font-bold text-brewasa-dark">Rp {stats.weekly.toLocaleString('id-ID')}</h3>
+                        <p className="text-xs text-gray-400 mt-1 font-medium">{stats.weeklyCups} Cup Terjual</p>
                     </div>
                     <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
                         <TrendingUp className="w-6 h-6" />
@@ -250,6 +280,7 @@ const TransactionHistory: React.FC = () => {
                     <div>
                         <p className="text-sm text-gray-500 font-medium mb-1">Bulan Ini</p>
                         <h3 className="text-2xl font-bold text-brewasa-dark">Rp {stats.monthly.toLocaleString('id-ID')}</h3>
+                        <p className="text-xs text-gray-400 mt-1 font-medium">{stats.monthlyCups} Cup Terjual</p>
                     </div>
                     <div className="p-3 bg-purple-50 rounded-xl text-purple-600">
                         <Calendar className="w-6 h-6" />
@@ -257,8 +288,9 @@ const TransactionHistory: React.FC = () => {
                 </div>
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
                     <div>
-                        <p className="text-sm text-gray-500 font-medium mb-1">Total Cup Terjual</p>
+                        <p className="text-sm text-gray-500 font-medium mb-1">Total Penjualan</p>
                         <h3 className="text-2xl font-bold text-brewasa-dark">{stats.totalCups} Cups</h3>
+                        <p className="text-xs text-gray-400 mt-1 font-medium">Sepanjang Waktu</p>
                     </div>
                     <div className="p-3 bg-orange-50 rounded-xl text-orange-600">
                         <ShoppingBag className="w-6 h-6" />
@@ -290,41 +322,67 @@ const TransactionHistory: React.FC = () => {
                             ))}
                         </div>
 
-                        {/* Date Filter */}
-                        <div className="flex gap-2 items-center">
-                            <input
-                                type="date"
-                                className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
-                                value={filterDate.start}
-                                onChange={e => setFilterDate(prev => ({ ...prev, start: e.target.value }))}
-                            />
-                            <span className="text-gray-400">-</span>
-                            <input
-                                type="date"
-                                className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
-                                value={filterDate.end}
-                                onChange={e => setFilterDate(prev => ({ ...prev, end: e.target.value }))}
-                            />
-                            {(filterDate.start || filterDate.end) && (
-                                <button
-                                    onClick={() => setFilterDate({ start: '', end: '' })}
-                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
-                                    title="Reset Date"
-                                >
-                                    <XCircle className="w-5 h-5" />
-                                </button>
-                            )}
-                        </div>
                     </div>
 
-                    <button
-                        onClick={exportToExcel}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition-colors flex items-center gap-2"
+                    {/* Date Filter */}
+                    <div className="flex gap-2 items-center">
+                        <input
+                            type="date"
+                            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
+                            value={filterDate.start}
+                            onChange={e => setFilterDate(prev => ({ ...prev, start: e.target.value }))}
+                        />
+                        <span className="text-gray-400">-</span>
+                        <input
+                            type="date"
+                            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
+                            value={filterDate.end}
+                            onChange={e => setFilterDate(prev => ({ ...prev, end: e.target.value }))}
+                        />
+                        {(filterDate.start || filterDate.end) && (
+                            <button
+                                onClick={() => setFilterDate({ start: '', end: '' })}
+                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                                title="Reset Date"
+                            >
+                                <XCircle className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Payment Filter */}
+                    <select
+                        className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
+                        value={filterPayment}
+                        onChange={e => setFilterPayment(e.target.value)}
                     >
-                        <Download className="w-4 h-4" /> Export Excel
-                    </button>
+                        <option value="ALL">Semua Pembayaran</option>
+                        <option value="CASH">Tunai</option>
+                        <option value="QRIS">QRIS</option>
+                        <option value="TRANSFER">Transfer</option>
+                    </select>
+
+                    {/* Voucher Filter */}
+                    <select
+                        className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
+                        value={filterVoucher}
+                        // @ts-ignore
+                        onChange={e => setFilterVoucher(e.target.value)}
+                    >
+                        <option value="ALL">Semua Transaksi</option>
+                        <option value="WITH_VOUCHER">Dengan Voucher</option>
+                        <option value="NO_VOUCHER">Tanpa Voucher</option>
+                    </select>
                 </div>
             </div>
+
+            <button
+                onClick={exportToExcel}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition-colors flex items-center gap-2"
+            >
+                <Download className="w-4 h-4" /> Export Excel
+            </button>
+
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 {loading ? (

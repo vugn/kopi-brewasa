@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Trash2, Plus, Image as ImageIcon, Loader2, Pencil, X, ChefHat } from 'lucide-react';
+import { Trash2, Plus, Image as ImageIcon, Loader2, Pencil, X, ChefHat, Printer } from 'lucide-react';
 import { MenuItem } from '../../types';
 
 interface Ingredient {
@@ -22,6 +22,11 @@ interface AdminMenuItem extends MenuItem {
     // Supabase returns these
 }
 
+interface PrintRecipeData {
+    menuName: string;
+    items: RecipeItem[];
+}
+
 const MenuManager: React.FC = () => {
     const [items, setItems] = useState<AdminMenuItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -37,7 +42,9 @@ const MenuManager: React.FC = () => {
         price: '',
         image: '',
         tags: '',
-        forWhat: ''
+        forWhat: '',
+        category: 'MAIN',
+        isAvailable: true
     });
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -50,6 +57,10 @@ const MenuManager: React.FC = () => {
     const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>([]);
     const [newRecipeItem, setNewRecipeItem] = useState({ ingredient_id: '', quantity: 0 });
 
+    // Print State
+    const [isPrinting, setIsPrinting] = useState(false);
+    const [printData, setPrintData] = useState<PrintRecipeData[]>([]);
+
     useEffect(() => {
         fetchItems();
     }, []);
@@ -59,14 +70,18 @@ const MenuManager: React.FC = () => {
         const { data, error } = await supabase
             .from('menu_items')
             .select('*')
-            .order('id', { ascending: true });
+            .select('*')
+            .order('category', { ascending: false })
+            .order('name', { ascending: true });
 
         if (error) {
             console.error('Error fetching menu:', error);
         } else {
             setItems(data?.map((item: any) => ({
                 ...item,
-                forWhat: item.for_what
+                ...item,
+                forWhat: item.for_what,
+                isAvailable: item.is_available
             })) || []);
         }
         setLoading(false);
@@ -95,7 +110,10 @@ const MenuManager: React.FC = () => {
             price: item.price,
             image: item.image,
             tags: item.tags.join(', '),
-            forWhat: item.forWhat
+
+            forWhat: item.forWhat,
+            category: item.category || 'MAIN',
+            isAvailable: item.is_available ?? true
         });
         setSelectedFile(null); // Reset file selection for edit
         // Scroll to top
@@ -110,7 +128,9 @@ const MenuManager: React.FC = () => {
             price: '',
             image: '',
             tags: '',
-            forWhat: ''
+            forWhat: '',
+            category: 'MAIN',
+            isAvailable: true
         });
         setSelectedFile(null);
     };
@@ -157,7 +177,9 @@ const MenuManager: React.FC = () => {
                 price: newItem.price,
                 image: imageUrl,
                 tags: tagsArray,
-                for_what: newItem.forWhat
+                for_what: newItem.forWhat,
+                category: newItem.category,
+                is_available: newItem.isAvailable
             };
 
             if (editingId) {
@@ -231,6 +253,98 @@ const MenuManager: React.FC = () => {
         setRecipeItems(recipeItems.filter(r => r.id !== id));
     };
 
+    const handlePrintRecipes = async () => {
+        setLoading(true);
+        // Fetch all menu items and their recipes
+        const { data: allMenus } = await supabase
+            .from('menu_items')
+            .select('id, name')
+            .order('name');
+
+        if (!allMenus) {
+            setLoading(false);
+            return;
+        }
+
+        const recipePromises = allMenus.map(async (menu) => {
+            const { data: recipes } = await supabase
+                .from('menu_recipes')
+                .select('*, ingredients(*)')
+                .eq('menu_item_id', menu.id);
+
+            return {
+                menuName: menu.name,
+                items: recipes || []
+            };
+        });
+
+        const results = await Promise.all(recipePromises);
+        // Filter out menus with no recipes
+        setPrintData(results.filter(r => r.items.length > 0));
+        setIsPrinting(true);
+        setLoading(false);
+    };
+
+    if (isPrinting) {
+        return (
+            <div className="bg-white min-h-screen p-8 absolute inset-0 z-50">
+                <div className="flex justify-between items-center mb-8 print:hidden">
+                    <h1 className="text-3xl font-bold">Laporan Resep Menu</h1>
+                    <div className="flex gap-4">
+                        <button
+                            onClick={() => window.print()}
+                            className="bg-brewasa-dark text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2"
+                        >
+                            <Printer className="w-5 h-5" /> Cetak / PDF
+                        </button>
+                        <button
+                            onClick={() => setIsPrinting(false)}
+                            className="bg-gray-200 text-gray-800 px-6 py-2 rounded-lg font-bold"
+                        >
+                            Tutup
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-8">
+                    {printData.map((data, idx) => (
+                        <div key={idx} className="break-inside-avoid border-b pb-6">
+                            <h2 className="text-xl font-bold mb-3 text-brewasa-dark">{data.menuName}</h2>
+                            <table className="w-full text-left text-sm border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-50 border-y border-gray-200">
+                                        <th className="py-2 px-4 font-semibold w-1/2">Bahan Baku</th>
+                                        <th className="py-2 px-4 font-semibold w-1/4">Jumlah</th>
+                                        <th className="py-2 px-4 font-semibold w-1/4 text-right">Estimasi Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.items.map(item => {
+                                        const cost = item.ingredients ? (item.ingredients.price_per_unit * item.quantity_required) : 0;
+                                        return (
+                                            <tr key={item.id} className="border-b border-gray-100">
+                                                <td className="py-2 px-4">{item.ingredients?.name}</td>
+                                                <td className="py-2 px-4">{item.quantity_required} {item.ingredients?.unit}</td>
+                                                <td className="py-2 px-4 text-right text-gray-500">Rp {cost.toLocaleString()}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {/* Total Cost Row */}
+                                    <tr className="bg-gray-50 font-bold">
+                                        <td className="py-2 px-4" colSpan={2}>Total HPP</td>
+                                        <td className="py-2 px-4 text-right">
+                                            Rp {data.items.reduce((sum, item) => sum + (item.ingredients ? (item.ingredients.price_per_unit * item.quantity_required) : 0), 0).toLocaleString()}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-8">
             <h2 className="text-2xl font-bold text-brewasa-dark">Menu Manager</h2>
@@ -242,11 +356,21 @@ const MenuManager: React.FC = () => {
                         {editingId ? <Pencil className="w-5 h-5 text-brewasa-copper" /> : <Plus className="w-5 h-5" />}
                         {editingId ? 'Edit Menu' : 'Tambah Menu Baru'}
                     </h3>
-                    {editingId && (
-                        <button onClick={handleCancelEdit} className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
-                            <X className="w-4 h-4" /> Batal Edit
-                        </button>
-                    )}
+                    <div className="flex gap-4">
+                        {!editingId && (
+                            <button
+                                onClick={handlePrintRecipes}
+                                className="text-sm bg-gray-100 hover:bg-gray-200 text-brewasa-dark px-3 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
+                            >
+                                <Printer className="w-4 h-4" /> Cetak Resep
+                            </button>
+                        )}
+                        {editingId && (
+                            <button onClick={handleCancelEdit} className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
+                                <X className="w-4 h-4" /> Batal Edit
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -257,13 +381,25 @@ const MenuManager: React.FC = () => {
                         onChange={e => setNewItem({ ...newItem, name: e.target.value })}
                         required
                     />
-                    <input
-                        placeholder="Harga (Contoh: 25k)"
-                        className="p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50"
-                        value={newItem.price}
-                        onChange={e => setNewItem({ ...newItem, price: e.target.value })}
-                        required
-                    />
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <input
+                            placeholder="Harga (Contoh: 25k)"
+                            className="p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50 w-full"
+                            value={newItem.price}
+                            onChange={e => setNewItem({ ...newItem, price: e.target.value })}
+                            required
+                        />
+                        <select
+                            className="p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50 w-full"
+                            value={newItem.category}
+                            onChange={e => setNewItem({ ...newItem, category: e.target.value })}
+                        >
+                            <option value="MAIN">Utama (Main)</option>
+                            <option value="ADDON">Addon / Extra</option>
+                            <option value="SPECIAL">Special</option>
+                        </select>
+                    </div>
                     <textarea
                         placeholder="Deskripsi"
                         className="p-3 border rounded-lg md:col-span-2 focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50"
@@ -319,6 +455,19 @@ const MenuManager: React.FC = () => {
                         value={newItem.forWhat}
                         onChange={e => setNewItem({ ...newItem, forWhat: e.target.value })}
                     />
+                    <div className="md:col-span-2 flex items-center gap-2 bg-gray-50 p-3 rounded-lg border">
+                        <input
+                            type="checkbox"
+                            id="isAvailable"
+                            className="w-5 h-5 text-brewasa-copper rounded focus:ring-brewasa-copper"
+                            checked={newItem.isAvailable}
+                            onChange={e => setNewItem({ ...newItem, isAvailable: e.target.checked })}
+                        />
+                        <label htmlFor="isAvailable" className="text-gray-700 font-medium cursor-pointer select-none">
+                            Tampilkan di Menu POS (Available)
+                        </label>
+                    </div>
+
                     <button
                         type="submit"
                         disabled={submitting}
@@ -351,6 +500,16 @@ const MenuManager: React.FC = () => {
                                     <td className="p-4 flex items-center gap-3">
                                         <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-cover bg-gray-100" />
                                         <div>
+                                            <div className="flex gap-2">
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${item.category === 'ADDON' ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
+                                                    {item.category || 'MAIN'}
+                                                </span>
+                                                {!item.is_available && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-bold border bg-gray-100 text-gray-500 border-gray-300">
+                                                        HIDDEN
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="font-bold text-brewasa-dark">{item.name}</p>
                                             <p className="text-xs text-gray-500 truncate max-w-[200px]">{item.description}</p>
                                         </div>

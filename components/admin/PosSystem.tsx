@@ -29,6 +29,13 @@ const PosSystem: React.FC = () => {
     const [discountAmount, setDiscountAmount] = useState('');
     const [processing, setProcessing] = useState(false);
 
+    // New Features State
+    const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'MAIN' | 'ADDON' | 'SPECIAL'>('ALL');
+    const [orderNotes, setOrderNotes] = useState('');
+    const [voucherDiscountType, setVoucherDiscountType] = useState<'FIXED' | 'PERCENT'>('FIXED');
+    const [voucherDiscountValue, setVoucherDiscountValue] = useState(''); // Raw input
+
+
     useEffect(() => {
         fetchMenu();
     }, []);
@@ -69,13 +76,32 @@ const PosSystem: React.FC = () => {
 
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-    const filteredMenu = menuItems.filter(item =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    const filteredMenu = menuItems.filter(item => {
+        const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+
+        // Filter HIDDEN items (unless specifically looking for them? No, POS should hide them)
+        // Assume is_available defaults to true if undefined
+        // const isAvailable = item.is_available !== false; // REMOVED: Staff should see hidden items
+
+        const matchesCategory = selectedCategory === 'ALL' || (item.category || 'MAIN') === selectedCategory;
+
+        return matchesSearch && matchesCategory;
+    });
 
     // Discount & Final Total Calculation
-    const discountNum = parseInt(discountAmount.replace(/\./g, '')) || 0;
+    const discountValueNum = parseInt(voucherDiscountValue.replace(/\./g, '')) || 0;
+
+    let discountNum = 0;
+    if (voucherDiscountType === 'FIXED') {
+        discountNum = discountValueNum;
+    } else {
+        // Percentage
+        // Cap at 100%
+        const percent = Math.min(100, discountValueNum);
+        discountNum = Math.round(totalAmount * (percent / 100));
+    }
+
     const finalTotal = Math.max(0, totalAmount - discountNum);
 
     // Smart Change Logic
@@ -119,7 +145,10 @@ const PosSystem: React.FC = () => {
                     customer_name: customerName,
                     voucher_code: voucherCode || null,
                     voucher_notes: voucherNotes || null,
-                    created_at: new Date().toISOString()
+                    created_at: new Date().toISOString(),
+                    notes: orderNotes || null,
+                    voucher_discount_type: voucherDiscountType,
+                    voucher_discount_value: discountValueNum
                 }])
                 .select()
                 .single();
@@ -150,6 +179,9 @@ const PosSystem: React.FC = () => {
             setVoucherCode('');
             setVoucherNotes('');
             setDiscountAmount('');
+            setOrderNotes('');
+            setVoucherDiscountType('FIXED');
+            setVoucherDiscountValue('');
         } catch (err: any) {
             alert('Gagal memproses transaksi: ' + err.message);
         } finally {
@@ -173,6 +205,27 @@ const PosSystem: React.FC = () => {
                             onChange={e => setSearchQuery(e.target.value)}
                         />
                     </div>
+                </div>
+
+                {/* Category Tabs */}
+                <div className="px-4 pb-2 flex gap-2 overflow-x-auto no-scrollbar">
+                    {[
+                        { id: 'ALL', label: 'Semua' },
+                        { id: 'MAIN', label: 'Utama' },
+                        { id: 'ADDON', label: 'Add-on / Extra' },
+                        { id: 'SPECIAL', label: 'Spesial' }
+                    ].map(cat => (
+                        <button
+                            key={cat.id}
+                            onClick={() => setSelectedCategory(cat.id as any)}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${selectedCategory === cat.id
+                                ? 'bg-brewasa-dark text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                        >
+                            {cat.label}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Grid */}
@@ -277,13 +330,17 @@ const PosSystem: React.FC = () => {
             {/* Payment Modal */}
             {showPaymentModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-3xl w-full max-w-lg h-[90vh] md:h-auto overflow-y-auto shadow-2xl flex flex-col">
-                        <div className="p-6 border-b flex justify-between items-center bg-gray-50 sticky top-0 z-10">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+                        {/* Header - Pinned */}
+                        <div className="p-6 border-b flex justify-between items-center bg-gray-50 flex-shrink-0">
                             <h3 className="font-bold text-xl">Pembayaran</h3>
-                            <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-gray-200 rounded-full"><X className="w-5 h-5" /></button>
+                            <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
                         </div>
 
-                        <div className="p-6 space-y-6 flex-1">
+                        {/* Scrollable Body */}
+                        <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
                             {/* Customer Name */}
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">Nama Customer</label>
@@ -293,6 +350,17 @@ const PosSystem: React.FC = () => {
                                     placeholder="Contoh: Budi"
                                     value={customerName}
                                     onChange={e => setCustomerName(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Order Notes */}
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">Catatan Pesanan (Order Notes)</label>
+                                <textarea
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50 resize-none h-20"
+                                    placeholder="Contoh: Jangan terlalu manis, Es sedikit..."
+                                    value={orderNotes}
+                                    onChange={e => setOrderNotes(e.target.value)}
                                 />
                             </div>
 
@@ -374,8 +442,22 @@ const PosSystem: React.FC = () => {
                                                     className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-mono focus:ring-2 focus:ring-brewasa-copper focus:outline-none"
                                                     placeholder="0"
                                                     value={discountAmount}
-                                                    onChange={e => setDiscountAmount(e.target.value)}
+                                                    onChange={e => setVoucherDiscountValue(e.target.value)}
                                                 />
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex bg-gray-200 rounded-lg p-1">
+                                                    <button
+                                                        onClick={() => setVoucherDiscountType('FIXED')}
+                                                        className={`px-2 py-1 rounded text-xs font-bold ${voucherDiscountType === 'FIXED' ? 'bg-white shadow text-brewasa-dark' : 'text-gray-500'}`}
+                                                    >
+                                                        Rp
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setVoucherDiscountType('PERCENT')}
+                                                        className={`px-2 py-1 rounded text-xs font-bold ${voucherDiscountType === 'PERCENT' ? 'bg-white shadow text-brewasa-dark' : 'text-gray-500'}`}
+                                                    >
+                                                        %
+                                                    </button>
+                                                </div>
                                             </div>
                                             {discountNum > 0 && (
                                                 <p className="text-xs text-green-600 mt-1 font-medium">
@@ -454,7 +536,8 @@ const PosSystem: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="p-6 border-t bg-gray-50 sticky bottom-0 z-10">
+                        {/* Footer - Pinned */}
+                        <div className="p-6 border-t bg-gray-50 flex-shrink-0">
                             <button
                                 onClick={handleCheckout}
                                 disabled={processing || (paymentMethod === 'CASH' && change < 0)}
