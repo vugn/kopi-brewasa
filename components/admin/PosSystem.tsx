@@ -26,7 +26,6 @@ const PosSystem: React.FC = () => {
     // Voucher State
     const [voucherCode, setVoucherCode] = useState('');
     const [voucherNotes, setVoucherNotes] = useState('');
-    const [discountAmount, setDiscountAmount] = useState('');
     const [processing, setProcessing] = useState(false);
 
     // New Features State
@@ -178,7 +177,6 @@ const PosSystem: React.FC = () => {
             setCustomerName('');
             setVoucherCode('');
             setVoucherNotes('');
-            setDiscountAmount('');
             setOrderNotes('');
             setVoucherDiscountType('FIXED');
             setVoucherDiscountValue('');
@@ -435,13 +433,15 @@ const PosSystem: React.FC = () => {
                                                 Nilai Diskon (Opsional)
                                             </label>
                                             <div className="relative">
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">Rp</span>
+                                                {voucherDiscountType === 'FIXED' && (
+                                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">Rp</span>
+                                                )}
                                                 <input
                                                     type="number"
                                                     inputMode="numeric"
-                                                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-mono focus:ring-2 focus:ring-brewasa-copper focus:outline-none"
+                                                    className={`w-full ${voucherDiscountType === 'FIXED' ? 'pl-12' : 'pl-4'} pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-mono focus:ring-2 focus:ring-brewasa-copper focus:outline-none`}
                                                     placeholder="0"
-                                                    value={discountAmount}
+                                                    value={voucherDiscountValue}
                                                     onChange={e => setVoucherDiscountValue(e.target.value)}
                                                 />
                                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex bg-gray-200 rounded-lg p-1">
