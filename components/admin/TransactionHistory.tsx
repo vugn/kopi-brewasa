@@ -376,6 +376,42 @@ const TransactionHistory: React.FC = () => {
                 </div>
             </div>
 
+            {/* Dashboard Summary based on Filter */}
+            <div className="bg-gradient-to-r from-brewasa-dark to-brewasa-copper p-4 rounded-xl text-white shadow-lg mb-6">
+                <h3 className="font-bold text-sm opacity-90 mb-3 flex items-center gap-2">
+                    <Filter className="w-4 h-4" />
+                    Ringkasan Filter Terpilih
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                        <p className="text-xs opacity-75 mb-1">Total Omzet</p>
+                        <p className="text-xl font-bold">
+                            Rp {filtered.reduce((acc, t) => acc + t.total_amount, 0).toLocaleString('id-ID')}
+                        </p>
+                    </div>
+                    <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                        <p className="text-xs opacity-75 mb-1">Total Transaksi</p>
+                        <p className="text-xl font-bold">
+                            {filtered.length} Transaksi
+                        </p>
+                    </div>
+                    <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                        <p className="text-xs opacity-75 mb-1">Total Cups Terjual</p>
+                        <p className="text-xl font-bold">
+                            {filtered.reduce((acc, t) => {
+                                let cups = 0;
+                                if (t.transaction_items) {
+                                    cups = t.transaction_items.reduce((sum, item) => sum + item.quantity, 0);
+                                } else if (t.items) {
+                                    cups = t.items.reduce((sum, item) => sum + item.quantity, 0);
+                                }
+                                return acc + cups;
+                            }, 0)} Cups
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             <button
                 onClick={exportToExcel}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition-colors flex items-center gap-2"
