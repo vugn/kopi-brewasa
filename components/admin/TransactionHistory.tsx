@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Search, Filter, Loader2, Calendar, User, ShoppingBag, Clock, CheckCircle, XCircle, AlertCircle, Download, TrendingUp, DollarSign, Trash2, Edit, Plus, Minus, X, CreditCard, Banknote, QrCode } from 'lucide-react';
+import { Search, Filter, Loader2, Calendar, User, ShoppingBag, Clock, CheckCircle, XCircle, AlertCircle, Download, TrendingUp, DollarSign, Trash2, Edit, Plus, Minus, X, CreditCard, Banknote, QrCode, Printer } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { bluetoothPrinter } from '../../utils/bluetoothPrinter';
 
 interface TransactionItem {
     id?: string; // Optional for new items
@@ -212,6 +213,21 @@ const TransactionHistory: React.FC = () => {
             setTransactions(updated);
             calculateStats(updated);
             alert('Transaksi berhasil dihapus dan stok dikembalikan.');
+        }
+    };
+
+    const handlePrintReceipt = async (transaction: Transaction) => {
+        try {
+            // Ensure items are available. If not, we might need to fetch them (but current fetch includes them)
+            const items = transaction.transaction_items || transaction.items || [];
+
+            // Map to the format expected by printReceipt if necessary, 
+            // but TransactionItem interface matches what printReceipt likely expects (item_name, quantity, price)
+
+            await bluetoothPrinter.printReceipt(transaction, items);
+        } catch (error: any) {
+            console.error("Print failed:", error);
+            alert("Gagal mencetak struk: " + error.message);
         }
     };
 
@@ -555,27 +571,31 @@ const TransactionHistory: React.FC = () => {
                     <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
                         <p className="text-xs opacity-75 mb-1">Total Omzet</p>
                         <p className="text-xl font-bold">
-                            Rp {filtered.reduce((acc, t) => acc + t.total_amount, 0).toLocaleString('id-ID')}
+                            Rp {filtered
+                                .filter(t => t.status === 'COMPLETED')
+                                .reduce((acc, t) => acc + t.total_amount, 0).toLocaleString('id-ID')}
                         </p>
                     </div>
                     <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
                         <p className="text-xs opacity-75 mb-1">Total Transaksi</p>
                         <p className="text-xl font-bold">
-                            {filtered.length} Transaksi
+                            {filtered.filter(t => t.status === 'COMPLETED').length} Transaksi
                         </p>
                     </div>
                     <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
                         <p className="text-xs opacity-75 mb-1">Total Cups Terjual</p>
                         <p className="text-xl font-bold">
-                            {filtered.reduce((acc, t) => {
-                                let cups = 0;
-                                if (t.transaction_items) {
-                                    cups = t.transaction_items.reduce((sum, item) => sum + item.quantity, 0);
-                                } else if (t.items) {
-                                    cups = t.items.reduce((sum, item) => sum + item.quantity, 0);
-                                }
-                                return acc + cups;
-                            }, 0)} Cups
+                            {filtered
+                                .filter(t => t.status === 'COMPLETED')
+                                .reduce((acc, t) => {
+                                    let cups = 0;
+                                    if (t.transaction_items) {
+                                        cups = t.transaction_items.reduce((sum, item) => sum + item.quantity, 0);
+                                    } else if (t.items) {
+                                        cups = t.items.reduce((sum, item) => sum + item.quantity, 0);
+                                    }
+                                    return acc + cups;
+                                }, 0)} Cups
                         </p>
                     </div>
                 </div>
@@ -711,6 +731,13 @@ const TransactionHistory: React.FC = () => {
                                                         <option value="COMPLETED">COMPLETED</option>
                                                         <option value="CANCELLED">CANCELLED</option>
                                                     </select>
+                                                    <button
+                                                        onClick={() => handlePrintReceipt(t)}
+                                                        className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"
+                                                        title="Cetak Struk"
+                                                    >
+                                                        <Printer className="w-4 h-4" />
+                                                    </button>
                                                     <button
                                                         onClick={() => deleteTransaction(t.id)}
                                                         className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"

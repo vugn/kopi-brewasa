@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, Calculator, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { MenuItem } from '../../types';
+import PrinterConnection from './PrinterConnection';
+import { bluetoothPrinter } from '../../utils/bluetoothPrinter';
 
 interface CartItem extends MenuItem {
     quantity: number;
@@ -259,6 +261,16 @@ const PosSystem: React.FC = () => {
             const { error: stockError } = await supabase.rpc('process_transaction_stock', { transaction_uuid: trans.id });
             if (stockError) console.error("Stock deduction failed:", stockError); // Don't block UI, just log
 
+            // Automatic Receipt Printing
+            try {
+                bluetoothPrinter.printReceipt(trans, itemsPayload).catch(err => {
+                    console.error("Auto print failed:", err);
+                    alert("Transaksi berhasil, tapi gagal print struk: " + err.message);
+                });
+            } catch (e) {
+                console.error("Print invocation failed", e);
+            }
+
             alert('Transaksi Berhasil!');
             setCart([]);
             setShowPaymentModal(false);
@@ -282,7 +294,7 @@ const PosSystem: React.FC = () => {
             {/* Left Panel: Menu Grid */}
             <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden pb-20 lg:pb-0">
                 {/* Header */}
-                <div className="p-4 border-b flex gap-4 sticky top-0 bg-white z-10">
+                <div className="p-4 border-b flex gap-4 sticky top-0 bg-white z-10 items-center">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
                         <input
@@ -293,6 +305,7 @@ const PosSystem: React.FC = () => {
                             onChange={e => setSearchQuery(e.target.value)}
                         />
                     </div>
+                    <PrinterConnection />
                 </div>
 
                 {/* Category Tabs */}
