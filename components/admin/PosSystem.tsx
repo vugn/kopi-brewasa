@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, Calculator, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, Calculator, X, ChevronDown, ChevronUp, Package } from 'lucide-react';
 import { MenuItem } from '../../types';
 import PrinterConnection from './PrinterConnection';
 import { bluetoothPrinter } from '../../utils/bluetoothPrinter';
@@ -162,7 +162,9 @@ const PosSystem: React.FC = () => {
                 menu_item_id: item.id,
                 quantity: item.quantity,
                 price: parsePrice(item.price),
-                item_name: item.name
+                item_name: item.name,
+                is_consignment: item.is_consignment ?? false,
+                consignment_cost: item.consignment_cost ?? 0
             }));
 
             // Insert new items
@@ -251,7 +253,9 @@ const PosSystem: React.FC = () => {
                 menu_item_id: item.id,
                 quantity: item.quantity,
                 price: parsePrice(item.price),
-                item_name: item.name
+                item_name: item.name,
+                is_consignment: item.is_consignment ?? false,
+                consignment_cost: item.consignment_cost ?? 0
             }));
 
             const { error: itemsError } = await supabase.from('transaction_items').insert(itemsPayload);
@@ -349,7 +353,12 @@ const PosSystem: React.FC = () => {
                                         </div>
                                     </div>
                                     <h3 className="font-bold text-gray-800 text-sm md:text-base line-clamp-1">{item.name}</h3>
-                                    <p className="text-brewasa-copper font-medium mt-auto text-sm md:text-base">{item.price}</p>
+                                    <div className="flex items-center gap-1 mt-auto">
+                                        <p className="text-brewasa-copper font-medium text-sm md:text-base">{item.price}</p>
+                                        {item.is_consignment && (
+                                            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-bold border border-amber-200">TITIPAN</span>
+                                        )}
+                                    </div>
                                 </button>
                             ))}
                         </div>

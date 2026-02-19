@@ -8,6 +8,8 @@ export interface MenuItem {
   forWhat: string;
   category?: "MAIN" | "ADDON" | "SPECIAL";
   is_available?: boolean;
+  is_consignment?: boolean;
+  consignment_cost?: number;
 }
 
 export interface SpotifyTrack {

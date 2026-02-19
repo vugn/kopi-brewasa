@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Trash2, Plus, Image as ImageIcon, Loader2, Pencil, X, ChefHat, Printer } from 'lucide-react';
+import { Trash2, Plus, Image as ImageIcon, Loader2, Pencil, X, ChefHat, Printer, Package } from 'lucide-react';
 import { MenuItem } from '../../types';
 
 interface Ingredient {
@@ -44,7 +44,9 @@ const MenuManager: React.FC = () => {
         tags: '',
         forWhat: '',
         category: 'MAIN',
-        isAvailable: true
+        isAvailable: true,
+        isConsignment: false,
+        consignmentCost: ''
     });
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -79,9 +81,10 @@ const MenuManager: React.FC = () => {
         } else {
             setItems(data?.map((item: any) => ({
                 ...item,
-                ...item,
                 forWhat: item.for_what,
-                isAvailable: item.is_available
+                isAvailable: item.is_available,
+                is_consignment: item.is_consignment ?? false,
+                consignment_cost: item.consignment_cost ?? 0
             })) || []);
         }
         setLoading(false);
@@ -110,10 +113,11 @@ const MenuManager: React.FC = () => {
             price: item.price,
             image: item.image,
             tags: item.tags.join(', '),
-
             forWhat: item.forWhat,
             category: item.category || 'MAIN',
-            isAvailable: item.is_available ?? true
+            isAvailable: item.is_available ?? true,
+            isConsignment: item.is_consignment ?? false,
+            consignmentCost: item.consignment_cost ? String(item.consignment_cost) : ''
         });
         setSelectedFile(null); // Reset file selection for edit
         // Scroll to top
@@ -130,7 +134,9 @@ const MenuManager: React.FC = () => {
             tags: '',
             forWhat: '',
             category: 'MAIN',
-            isAvailable: true
+            isAvailable: true,
+            isConsignment: false,
+            consignmentCost: ''
         });
         setSelectedFile(null);
     };
@@ -179,7 +185,9 @@ const MenuManager: React.FC = () => {
                 tags: tagsArray,
                 for_what: newItem.forWhat,
                 category: newItem.category,
-                is_available: newItem.isAvailable
+                is_available: newItem.isAvailable,
+                is_consignment: newItem.isConsignment,
+                consignment_cost: newItem.isConsignment ? (parseInt(newItem.consignmentCost) || 0) : 0
             };
 
             if (editingId) {
@@ -468,6 +476,37 @@ const MenuManager: React.FC = () => {
                         </label>
                     </div>
 
+                    {/* Consignment Section */}
+                    <div className="md:col-span-2 bg-amber-50 p-4 rounded-lg border border-amber-200 space-y-3">
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="isConsignment"
+                                className="w-5 h-5 text-amber-600 rounded focus:ring-amber-500"
+                                checked={newItem.isConsignment}
+                                onChange={e => setNewItem({ ...newItem, isConsignment: e.target.checked, consignmentCost: e.target.checked ? newItem.consignmentCost : '' })}
+                            />
+                            <label htmlFor="isConsignment" className="text-amber-800 font-medium cursor-pointer select-none flex items-center gap-1">
+                                <Package className="w-4 h-4" /> Barang Titipan (Consignment)
+                            </label>
+                        </div>
+                        {newItem.isConsignment && (
+                            <div className="animate-fadeIn">
+                                <label className="block text-sm font-bold text-amber-700 mb-1">Harga Modal dari Supplier (Rp)</label>
+                                <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    className="w-full p-3 border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/50 font-mono"
+                                    placeholder="Contoh: 5000"
+                                    value={newItem.consignmentCost}
+                                    onChange={e => setNewItem({ ...newItem, consignmentCost: e.target.value })}
+                                    required
+                                />
+                                <p className="text-xs text-amber-600 mt-1">Profit = Harga Jual − Harga Modal ini</p>
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         type="submit"
                         disabled={submitting}
@@ -500,10 +539,15 @@ const MenuManager: React.FC = () => {
                                     <td className="p-4 flex items-center gap-3">
                                         <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-cover bg-gray-100" />
                                         <div>
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-2 flex-wrap">
                                                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${item.category === 'ADDON' ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
                                                     {item.category || 'MAIN'}
                                                 </span>
+                                                {item.is_consignment && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-bold border bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-0.5">
+                                                        <Package className="w-3 h-3" /> TITIPAN
+                                                    </span>
+                                                )}
                                                 {!item.is_available && (
                                                     <span className="text-[10px] px-1.5 py-0.5 rounded font-bold border bg-gray-100 text-gray-500 border-gray-300">
                                                         HIDDEN

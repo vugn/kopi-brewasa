@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Search, Filter, Loader2, Calendar, User, ShoppingBag, Clock, CheckCircle, XCircle, AlertCircle, Download, TrendingUp, DollarSign, Trash2, Edit, Plus, Minus, X, CreditCard, Banknote, QrCode, Printer } from 'lucide-react';
+import { Search, Filter, Loader2, Calendar, User, ShoppingBag, Clock, CheckCircle, XCircle, AlertCircle, Download, TrendingUp, DollarSign, Trash2, Edit, Plus, Minus, X, CreditCard, Banknote, QrCode, Printer, Package, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { bluetoothPrinter } from '../../utils/bluetoothPrinter';
 
@@ -11,6 +11,8 @@ interface TransactionItem {
     item_name: string;
     quantity: number;
     price: number;
+    is_consignment?: boolean;
+    consignment_cost?: number;
 }
 
 interface Transaction {
@@ -41,11 +43,16 @@ const TransactionHistory: React.FC = () => {
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterPayment, setFilterPayment] = useState('ALL');
     const [filterVoucher, setFilterVoucher] = useState<'ALL' | 'WITH_VOUCHER' | 'NO_VOUCHER'>('ALL');
+    const [filterConsignment, setFilterConsignment] = useState<'ALL' | 'WITH_CONSIGNMENT' | 'NO_CONSIGNMENT'>('ALL');
     const [filterDate, setFilterDate] = useState({ start: '', end: '' });
+    const [showStatsOnMobile, setShowStatsOnMobile] = useState(false);
+    const [showFilterSummaryOnMobile, setShowFilterSummaryOnMobile] = useState(false);
     const [stats, setStats] = useState({
         daily: 0, weekly: 0, monthly: 0,
         dailyCups: 0, weeklyCups: 0, monthlyCups: 0,
-        totalCups: 0
+        totalCups: 0,
+        dailyConsignment: 0, weeklyConsignment: 0, monthlyConsignment: 0,
+        dailyConsignmentProfit: 0, weeklyConsignmentProfit: 0, monthlyConsignmentProfit: 0
     });
 
     // Edit Items State
@@ -88,7 +95,7 @@ const TransactionHistory: React.FC = () => {
                 discount_amount,
                 subtotal,
                 transaction_items (
-                    id, item_name, quantity, price, menu_item_id
+                    id, item_name, quantity, price, menu_item_id, is_consignment, consignment_cost
                 )
             `)
             .order('created_at', { ascending: false });
@@ -113,8 +120,6 @@ const TransactionHistory: React.FC = () => {
         startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday as start
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-
-
         let daily = 0;
         let weekly = 0;
         let monthly = 0;
@@ -122,44 +127,69 @@ const TransactionHistory: React.FC = () => {
         let weeklyCups = 0;
         let monthlyCups = 0;
         let totalCups = 0;
+        let dailyConsignment = 0;
+        let weeklyConsignment = 0;
+        let monthlyConsignment = 0;
+        let dailyConsignmentProfit = 0;
+        let weeklyConsignmentProfit = 0;
+        let monthlyConsignmentProfit = 0;
 
         data.forEach(t => {
             // Only count completed transactions for stats
             if (t.status !== 'COMPLETED') return;
 
             const tDate = new Date(t.created_at);
+            const items = t.transaction_items || t.items || [];
 
             // Calculate cups for this transaction
-            let cupsInTransaction = 0;
-            if (t.transaction_items) {
-                cupsInTransaction = t.transaction_items.reduce((acc, item) => acc + item.quantity, 0);
-            } else if (t.items) {
-                cupsInTransaction = t.items.reduce((acc, item) => acc + item.quantity, 0);
-            }
+            let cupsInTransaction = items.reduce((acc, item) => acc + item.quantity, 0);
+
+            // Calculate consignment revenue & profit for this transaction
+            let consignmentRevenue = 0;
+            let consignmentProfit = 0;
+            items.forEach(item => {
+                if (item.is_consignment) {
+                    const revenue = item.price * item.quantity;
+                    const cost = (item.consignment_cost || 0) * item.quantity;
+                    consignmentRevenue += revenue;
+                    consignmentProfit += revenue - cost;
+                }
+            });
 
             // Daily
             if (tDate >= today) {
                 daily += t.total_amount;
                 dailyCups += cupsInTransaction;
+                dailyConsignment += consignmentRevenue;
+                dailyConsignmentProfit += consignmentProfit;
             }
 
             // Weekly
             if (tDate >= startOfWeek) {
                 weekly += t.total_amount;
                 weeklyCups += cupsInTransaction;
+                weeklyConsignment += consignmentRevenue;
+                weeklyConsignmentProfit += consignmentProfit;
             }
 
             // Monthly
             if (tDate >= startOfMonth) {
                 monthly += t.total_amount;
                 monthlyCups += cupsInTransaction;
+                monthlyConsignment += consignmentRevenue;
+                monthlyConsignmentProfit += consignmentProfit;
             }
 
             // Total All Time
             totalCups += cupsInTransaction;
         });
 
-        setStats({ daily, weekly, monthly, dailyCups, weeklyCups, monthlyCups, totalCups });
+        setStats({
+            daily, weekly, monthly,
+            dailyCups, weeklyCups, monthlyCups, totalCups,
+            dailyConsignment, weeklyConsignment, monthlyConsignment,
+            dailyConsignmentProfit, weeklyConsignmentProfit, monthlyConsignmentProfit
+        });
     };
 
     const updateStatus = async (id: string, newStatus: string) => {
@@ -321,7 +351,9 @@ const TransactionHistory: React.FC = () => {
                 menu_item_id: item.menu_item_id, // This must be present!
                 item_name: item.item_name,
                 quantity: item.quantity,
-                price: item.price
+                price: item.price,
+                is_consignment: item.is_consignment ?? false,
+                consignment_cost: item.is_consignment ? (item.consignment_cost || 0) : 0
             }));
 
             // Filter out items without menu_item_id (legacy or error?)
@@ -412,12 +444,19 @@ const TransactionHistory: React.FC = () => {
             (filterVoucher === 'WITH_VOUCHER' && !!t.voucher_code) ||
             (filterVoucher === 'NO_VOUCHER' && !t.voucher_code);
 
+        // Consignment Filtering
+        let matchesConsignment = true;
+        if (filterConsignment !== 'ALL') {
+            const items = t.transaction_items || t.items || [];
+            const hasConsignment = items.some(i => i.is_consignment);
+            matchesConsignment = filterConsignment === 'WITH_CONSIGNMENT' ? hasConsignment : !hasConsignment;
+        }
+
         // Date Filtering
         let matchesDate = true;
         if (filterDate.start) {
             const start = new Date(filterDate.start);
             const tDate = new Date(t.created_at);
-            // Reset time for comparison
             start.setHours(0, 0, 0, 0);
             const tDateOnly = new Date(tDate);
             tDateOnly.setHours(0, 0, 0, 0);
@@ -428,57 +467,95 @@ const TransactionHistory: React.FC = () => {
             const tDate = new Date(t.created_at);
             end.setHours(23, 59, 59, 999);
             const tDateOnly = new Date(tDate);
-            // We compare full date vs end of filtered day
             matchesDate = matchesDate && tDate <= end;
         }
 
-        return matchesStatus && matchesDate && matchesPayment && matchesVoucher;
+        return matchesStatus && matchesDate && matchesPayment && matchesVoucher && matchesConsignment;
     });
 
     return (
         <div className="space-y-6">
-            {/* Stats Cards */}
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-gray-500 font-medium mb-1">Penjualan Hari Ini</p>
-                        <h3 className="text-2xl font-bold text-brewasa-dark">Rp {stats.daily.toLocaleString('id-ID')}</h3>
-                        <p className="text-xs text-gray-400 mt-1 font-medium">{stats.dailyCups} Cup Terjual</p>
+            {/* Stats Section - Accordion on Mobile */}
+            <div className="md:block">
+                {/* Mobile Accordion Header */}
+                <button
+                    onClick={() => setShowStatsOnMobile(!showStatsOnMobile)}
+                    className="md:hidden w-full bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between mb-2"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-green-50 rounded-xl text-green-600">
+                            <DollarSign className="w-5 h-5" />
+                        </div>
+                        <div className="text-left">
+                            <p className="text-xs text-gray-500">Omzet Bulan Ini</p>
+                            <p className="text-lg font-bold text-brewasa-dark">Rp {(stats.monthly - stats.monthlyConsignment).toLocaleString('id-ID')}</p>
+                        </div>
                     </div>
-                    <div className="p-3 bg-green-50 rounded-xl text-green-600">
-                        <DollarSign className="w-6 h-6" />
+                    <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${showStatsOnMobile ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Stats Content - always visible on desktop, toggle on mobile */}
+                <div className={`${showStatsOnMobile ? 'block' : 'hidden'} md:block space-y-4`}>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Omzet Hari Ini</p>
+                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {(stats.daily - stats.dailyConsignment).toLocaleString('id-ID')}</h3>
+                                <p className="text-[10px] md:text-xs text-gray-400 mt-1 font-medium">{stats.dailyCups} Cup</p>
+                            </div>
+                            <div className="hidden md:block p-3 bg-green-50 rounded-xl text-green-600">
+                                <DollarSign className="w-6 h-6" />
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Omzet Minggu</p>
+                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {(stats.weekly - stats.weeklyConsignment).toLocaleString('id-ID')}</h3>
+                                <p className="text-[10px] md:text-xs text-gray-400 mt-1 font-medium">{stats.weeklyCups} Cup</p>
+                            </div>
+                            <div className="hidden md:block p-3 bg-blue-50 rounded-xl text-blue-600">
+                                <TrendingUp className="w-6 h-6" />
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Omzet Bulan</p>
+                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {(stats.monthly - stats.monthlyConsignment).toLocaleString('id-ID')}</h3>
+                                <p className="text-[10px] md:text-xs text-gray-400 mt-1 font-medium">{stats.monthlyCups} Cup</p>
+                            </div>
+                            <div className="hidden md:block p-3 bg-purple-50 rounded-xl text-purple-600">
+                                <Calendar className="w-6 h-6" />
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Total Penjualan</p>
+                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">{stats.totalCups} Cups</h3>
+                                <p className="text-[10px] md:text-xs text-gray-400 mt-1 font-medium">Sepanjang Waktu</p>
+                            </div>
+                            <div className="hidden md:block p-3 bg-orange-50 rounded-xl text-orange-600">
+                                <ShoppingBag className="w-6 h-6" />
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-gray-500 font-medium mb-1">Minggu Ini</p>
-                        <h3 className="text-2xl font-bold text-brewasa-dark">Rp {stats.weekly.toLocaleString('id-ID')}</h3>
-                        <p className="text-xs text-gray-400 mt-1 font-medium">{stats.weeklyCups} Cup Terjual</p>
-                    </div>
-                    <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
-                        <TrendingUp className="w-6 h-6" />
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-gray-500 font-medium mb-1">Bulan Ini</p>
-                        <h3 className="text-2xl font-bold text-brewasa-dark">Rp {stats.monthly.toLocaleString('id-ID')}</h3>
-                        <p className="text-xs text-gray-400 mt-1 font-medium">{stats.monthlyCups} Cup Terjual</p>
-                    </div>
-                    <div className="p-3 bg-purple-50 rounded-xl text-purple-600">
-                        <Calendar className="w-6 h-6" />
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-gray-500 font-medium mb-1">Total Penjualan</p>
-                        <h3 className="text-2xl font-bold text-brewasa-dark">{stats.totalCups} Cups</h3>
-                        <p className="text-xs text-gray-400 mt-1 font-medium">Sepanjang Waktu</p>
-                    </div>
-                    <div className="p-3 bg-orange-50 rounded-xl text-orange-600">
-                        <ShoppingBag className="w-6 h-6" />
-                    </div>
+
+                    {/* Consignment Stats Row */}
+                    {(stats.monthlyConsignment > 0 || stats.monthlyConsignmentProfit > 0) && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                            <div className="bg-amber-50 p-4 md:p-5 rounded-2xl shadow-sm border border-amber-200">
+                                <p className="text-xs md:text-sm text-amber-700 font-medium mb-1 flex items-center gap-1"><Package className="w-3 h-3 md:w-4 md:h-4" /> Titipan (Bulan Ini)</p>
+                                <h3 className="text-lg md:text-xl font-bold text-amber-800">Rp {stats.monthlyConsignment.toLocaleString('id-ID')}</h3>
+                            </div>
+                            <div className="bg-green-50 p-4 md:p-5 rounded-2xl shadow-sm border border-green-200">
+                                <p className="text-xs md:text-sm text-green-700 font-medium mb-1">Profit Titipan</p>
+                                <h3 className="text-lg md:text-xl font-bold text-green-800">Rp {stats.monthlyConsignmentProfit.toLocaleString('id-ID')}</h3>
+                            </div>
+                            <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-gray-100">
+                                <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Total Omzet (incl. Titipan)</p>
+                                <h3 className="text-lg md:text-xl font-bold text-brewasa-dark">Rp {stats.monthly.toLocaleString('id-ID')}</h3>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -487,11 +564,11 @@ const TransactionHistory: React.FC = () => {
                     <h2 className="text-2xl font-bold text-brewasa-dark">Riwayat Transaksi</h2>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-4 justify-between items-end md:items-center">
-                    {/* Filters */}
-                    <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                <div className="flex flex-col gap-3">
+                    {/* Row 1: Status + Date */}
+                    <div className="flex flex-wrap gap-2 items-center">
                         {/* Status Filter */}
-                        <div className="flex bg-white rounded-lg border border-gray-200 p-1 overflow-x-auto self-start">
+                        <div className="flex bg-white rounded-lg border border-gray-200 p-1 overflow-x-auto">
                             {['ALL', 'PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED'].map(s => (
                                 <button
                                     key={s}
@@ -506,98 +583,157 @@ const TransactionHistory: React.FC = () => {
                             ))}
                         </div>
 
+                        {/* Date Filter */}
+                        <div className="flex gap-2 items-center">
+                            <input
+                                type="date"
+                                className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none w-[130px]"
+                                value={filterDate.start}
+                                onChange={e => setFilterDate(prev => ({ ...prev, start: e.target.value }))}
+                            />
+                            <span className="text-gray-400 text-sm">–</span>
+                            <input
+                                type="date"
+                                className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none w-[130px]"
+                                value={filterDate.end}
+                                onChange={e => setFilterDate(prev => ({ ...prev, end: e.target.value }))}
+                            />
+                            {(filterDate.start || filterDate.end) && (
+                                <button
+                                    onClick={() => setFilterDate({ start: '', end: '' })}
+                                    className="p-1 text-red-500 hover:bg-red-50 rounded-lg"
+                                    title="Reset Date"
+                                >
+                                    <XCircle className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Date Filter */}
-                    <div className="flex gap-2 items-center">
-                        <input
-                            type="date"
+                    {/* Row 2: Dropdowns */}
+                    <div className="flex flex-wrap gap-2">
+                        <select
                             className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
-                            value={filterDate.start}
-                            onChange={e => setFilterDate(prev => ({ ...prev, start: e.target.value }))}
-                        />
-                        <span className="text-gray-400">-</span>
-                        <input
-                            type="date"
+                            value={filterPayment}
+                            onChange={e => setFilterPayment(e.target.value)}
+                        >
+                            <option value="ALL">Semua Pembayaran</option>
+                            <option value="CASH">Tunai</option>
+                            <option value="QRIS">QRIS</option>
+                            <option value="TRANSFER">Transfer</option>
+                            <option value="OPEN_BILL">Open Bill</option>
+                        </select>
+
+                        <select
                             className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
-                            value={filterDate.end}
-                            onChange={e => setFilterDate(prev => ({ ...prev, end: e.target.value }))}
-                        />
-                        {(filterDate.start || filterDate.end) && (
-                            <button
-                                onClick={() => setFilterDate({ start: '', end: '' })}
-                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
-                                title="Reset Date"
-                            >
-                                <XCircle className="w-5 h-5" />
-                            </button>
-                        )}
+                            value={filterVoucher}
+                            // @ts-ignore
+                            onChange={e => setFilterVoucher(e.target.value)}
+                        >
+                            <option value="ALL">Semua Voucher</option>
+                            <option value="WITH_VOUCHER">Dengan Voucher</option>
+                            <option value="NO_VOUCHER">Tanpa Voucher</option>
+                        </select>
+
+                        <select
+                            className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700 focus:ring-2 focus:ring-amber-300/30 outline-none font-medium"
+                            value={filterConsignment}
+                            // @ts-ignore
+                            onChange={e => setFilterConsignment(e.target.value)}
+                        >
+                            <option value="ALL">Semua (Titipan)</option>
+                            <option value="WITH_CONSIGNMENT">Ada Barang Titipan</option>
+                            <option value="NO_CONSIGNMENT">Tanpa Titipan</option>
+                        </select>
                     </div>
-
-                    {/* Payment Filter */}
-                    <select
-                        className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
-                        value={filterPayment}
-                        onChange={e => setFilterPayment(e.target.value)}
-                    >
-                        <option value="ALL">Semua Pembayaran</option>
-                        <option value="CASH">Tunai</option>
-                        <option value="QRIS">QRIS</option>
-                        <option value="TRANSFER">Transfer</option>
-                        <option value="OPEN_BILL">Open Bill</option>
-                    </select>
-
-                    {/* Voucher Filter */}
-                    <select
-                        className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
-                        value={filterVoucher}
-                        // @ts-ignore
-                        onChange={e => setFilterVoucher(e.target.value)}
-                    >
-                        <option value="ALL">Semua Transaksi</option>
-                        <option value="WITH_VOUCHER">Dengan Voucher</option>
-                        <option value="NO_VOUCHER">Tanpa Voucher</option>
-                    </select>
                 </div>
             </div>
 
-            {/* Dashboard Summary based on Filter */}
-            <div className="bg-gradient-to-r from-brewasa-dark to-brewasa-copper p-4 rounded-xl text-white shadow-lg mb-6">
-                <h3 className="font-bold text-sm opacity-90 mb-3 flex items-center gap-2">
-                    <Filter className="w-4 h-4" />
-                    Ringkasan Filter Terpilih
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
-                        <p className="text-xs opacity-75 mb-1">Total Omzet</p>
-                        <p className="text-xl font-bold">
-                            Rp {filtered
-                                .filter(t => t.status === 'COMPLETED')
-                                .reduce((acc, t) => acc + t.total_amount, 0).toLocaleString('id-ID')}
-                        </p>
+            {/* Dashboard Summary - Accordion on Mobile */}
+            <div className="bg-gradient-to-r from-brewasa-dark to-brewasa-copper rounded-xl text-white shadow-lg mb-4">
+                {/* Mobile Accordion Header */}
+                <button
+                    onClick={() => setShowFilterSummaryOnMobile(!showFilterSummaryOnMobile)}
+                    className="md:hidden w-full p-4 flex items-center justify-between"
+                >
+                    <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4" />
+                        <span className="font-bold text-sm">Ringkasan Filter</span>
+                        <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                            {filtered.filter(t => t.status === 'COMPLETED').length} transaksi
+                        </span>
                     </div>
-                    <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
-                        <p className="text-xs opacity-75 mb-1">Total Transaksi</p>
-                        <p className="text-xl font-bold">
-                            {filtered.filter(t => t.status === 'COMPLETED').length} Transaksi
-                        </p>
+                    <ChevronDown className={`w-5 h-5 opacity-75 transition-transform duration-200 ${showFilterSummaryOnMobile ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Desktop: always visible header */}
+                <div className="hidden md:block p-4 pb-0">
+                    <h3 className="font-bold text-sm opacity-90 mb-3 flex items-center gap-2">
+                        <Filter className="w-4 h-4" />
+                        Ringkasan Filter Terpilih
+                    </h3>
+                </div>
+
+                {/* Content - always visible on desktop, toggle on mobile */}
+                <div className={`${showFilterSummaryOnMobile ? 'block' : 'hidden'} md:block p-4 pt-2 md:pt-0`}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-3">
+                        <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                            <p className="text-xs opacity-75 mb-1">Omzet Sendiri</p>
+                            <p className="text-lg md:text-xl font-bold">
+                                Rp {(() => {
+                                    const completed = filtered.filter(t => t.status === 'COMPLETED');
+                                    const totalOmzet = completed.reduce((acc, t) => acc + t.total_amount, 0);
+                                    const consignmentRevenue = completed.reduce((acc, t) => {
+                                        const items = t.transaction_items || t.items || [];
+                                        return acc + items.filter(i => i.is_consignment).reduce((sum, i) => sum + (i.price * i.quantity), 0);
+                                    }, 0);
+                                    return (totalOmzet - consignmentRevenue).toLocaleString('id-ID');
+                                })()}
+                            </p>
+                        </div>
+                        <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                            <p className="text-xs opacity-75 mb-1">Total Transaksi</p>
+                            <p className="text-lg md:text-xl font-bold">
+                                {filtered.filter(t => t.status === 'COMPLETED').length} Transaksi
+                            </p>
+                        </div>
+                        <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                            <p className="text-xs opacity-75 mb-1">Total Cups Terjual</p>
+                            <p className="text-lg md:text-xl font-bold">
+                                {filtered
+                                    .filter(t => t.status === 'COMPLETED')
+                                    .reduce((acc, t) => {
+                                        const items = t.transaction_items || t.items || [];
+                                        return acc + items.reduce((sum, item) => sum + item.quantity, 0);
+                                    }, 0)} Cups
+                            </p>
+                        </div>
                     </div>
-                    <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
-                        <p className="text-xs opacity-75 mb-1">Total Cups Terjual</p>
-                        <p className="text-xl font-bold">
-                            {filtered
-                                .filter(t => t.status === 'COMPLETED')
-                                .reduce((acc, t) => {
-                                    let cups = 0;
-                                    if (t.transaction_items) {
-                                        cups = t.transaction_items.reduce((sum, item) => sum + item.quantity, 0);
-                                    } else if (t.items) {
-                                        cups = t.items.reduce((sum, item) => sum + item.quantity, 0);
-                                    }
-                                    return acc + cups;
-                                }, 0)} Cups
-                        </p>
-                    </div>
+                    {/* Consignment breakdown in filter summary */}
+                    {(() => {
+                        const completed = filtered.filter(t => t.status === 'COMPLETED');
+                        const consignmentRevenue = completed.reduce((acc, t) => {
+                            const items = t.transaction_items || t.items || [];
+                            return acc + items.filter(i => i.is_consignment).reduce((sum, i) => sum + (i.price * i.quantity), 0);
+                        }, 0);
+                        const consignmentProfit = completed.reduce((acc, t) => {
+                            const items = t.transaction_items || t.items || [];
+                            return acc + items.filter(i => i.is_consignment).reduce((sum, i) => sum + ((i.price - (i.consignment_cost || 0)) * i.quantity), 0);
+                        }, 0);
+                        if (consignmentRevenue <= 0) return null;
+                        return (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 border-t border-white/20 pt-3">
+                                <div className="bg-amber-500/20 p-3 rounded-lg backdrop-blur-sm">
+                                    <p className="text-xs opacity-75 mb-1 flex items-center gap-1"><Package className="w-3 h-3" /> Penjualan Titipan</p>
+                                    <p className="text-lg font-bold">Rp {consignmentRevenue.toLocaleString('id-ID')}</p>
+                                </div>
+                                <div className="bg-green-500/20 p-3 rounded-lg backdrop-blur-sm">
+                                    <p className="text-xs opacity-75 mb-1">Profit Titipan</p>
+                                    <p className="text-lg font-bold">Rp {consignmentProfit.toLocaleString('id-ID')}</p>
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
             </div>
 
@@ -613,109 +749,90 @@ const TransactionHistory: React.FC = () => {
                 {loading ? (
                     <div className="p-12 text-center flex justify-center"><Loader2 className="animate-spin text-brewasa-copper" /></div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50 border-b">
-                                <tr>
-                                    <th className="p-4 font-semibold text-gray-600 whitespace-nowrap">ID & Waktu</th>
-                                    <th className="p-4 font-semibold text-gray-600">Customer</th>
-                                    <th className="p-4 font-semibold text-gray-600">Type</th>
-                                    <th className="p-4 font-semibold text-gray-600">Items</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-center">Voucher</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">Diskon</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">Total</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-center">Metode</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-center">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {filtered.length === 0 && (
-                                    <tr><td colSpan={9} className="p-8 text-center text-gray-400">Tidak ada data transaksi.</td></tr>
-                                )}
-                                {filtered.map(t => (
-                                    <React.Fragment key={t.id}>
-                                        <tr className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="p-4">
-                                                <div className="font-mono text-xs text-gray-400">#{t.id.slice(0, 8)}</div>
-                                                <div className="text-sm font-medium text-gray-700 flex items-center gap-1 mt-1">
-                                                    <Calendar className="w-3 h-3" />
-                                                    {new Date(t.created_at).toLocaleDateString('id-ID')}
-                                                    <div className="hidden sm:flex items-center gap-1">
-                                                        <Clock className="w-3 h-3 ml-2" />
+                    <>
+                        {/* Desktop Table (hidden on mobile) */}
+                        <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full text-left min-w-[900px]">
+                                <thead className="bg-gray-50 border-b">
+                                    <tr>
+                                        <th className="p-3 font-semibold text-gray-600 text-xs whitespace-nowrap">ID & Waktu</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-xs">Customer</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-xs">Items</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-xs text-right">Total</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-xs text-center">Metode</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-xs text-center">Status</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-xs text-center w-24">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {filtered.length === 0 && (
+                                        <tr><td colSpan={7} className="p-8 text-center text-gray-400">Tidak ada data transaksi.</td></tr>
+                                    )}
+                                    {filtered.map(t => (
+                                        <React.Fragment key={t.id}>
+                                            <tr className="hover:bg-gray-50/50 transition-colors">
+                                                <td className="p-3">
+                                                    <div className="font-mono text-[10px] text-gray-400">#{t.id.slice(0, 8)}</div>
+                                                    <div className="text-xs font-medium text-gray-700 flex items-center gap-1 mt-0.5">
+                                                        <Calendar className="w-3 h-3" />
+                                                        {new Date(t.created_at).toLocaleDateString('id-ID')}
+                                                        <Clock className="w-3 h-3 ml-1" />
                                                         {new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                                                     </div>
-                                                </div>
-                                            </td>
-                                            <td className="p-4">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 rounded-full bg-brewasa-cream/50 flex items-center justify-center text-brewasa-dark font-bold text-xs border border-brewasa-cream shrink-0">
-                                                        <User className="w-4 h-4" />
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-7 h-7 rounded-full bg-brewasa-cream/50 flex items-center justify-center text-brewasa-dark text-xs border border-brewasa-cream shrink-0">
+                                                            <User className="w-3 h-3" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <span className="font-medium text-gray-800 text-sm truncate block max-w-[120px]">{t.customer_name || 'Tanpa Nama'}</span>
+                                                            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-blue-50 text-blue-600 border-blue-100">
+                                                                {t.order_type?.replace('_', ' ') || 'DINE IN'}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                    <span className="font-medium text-gray-800 line-clamp-1">{t.customer_name || 'Tanpa Nama'}</span>
-                                                </div>
-                                            </td>
-                                            <td className="p-4">
-                                                <span className="px-2 py-1 rounded text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 whitespace-nowrap">
-                                                    {t.order_type?.replace('_', ' ') || 'DINE IN'}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 max-w-xs min-w-[200px]">
-                                                <div className="flex flex-wrap gap-1 items-center">
-                                                    {/* @ts-ignore */}
-                                                    {t.transaction_items?.map((i, idx) => (
-                                                        <span key={idx} className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs text-gray-600">
-                                                            <span className="font-bold">{i.quantity}x</span> {i.item_name}
-                                                        </span>
-                                                    ))}
-                                                    <button
-                                                        onClick={() => openEditModal(t)}
-                                                        className="ml-auto p-1 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                                                        title="Edit Item Transaksi"
-                                                    >
-                                                        <Edit className="w-3 h-3" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                {t.voucher_code ? (
-                                                    <span className="px-2 py-1 rounded text-xs font-mono font-bold border bg-yellow-50 text-yellow-700 border-yellow-200">
-                                                        {t.voucher_code}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-gray-400 text-xs">-</span>
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-right">
-                                                {t.discount_amount && t.discount_amount > 0 ? (
-                                                    <span className="font-bold text-green-600 whitespace-nowrap">
-                                                        - Rp {t.discount_amount.toLocaleString('id-ID')}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-gray-400 text-xs">-</span>
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-right font-bold text-brewasa-dark whitespace-nowrap">
-                                                Rp {t.total_amount.toLocaleString('id-ID')}
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <div className="flex items-center justify-center gap-1 group">
-                                                    <span className={`px-2 py-1 rounded text-xs font-bold border ${t.payment_method === 'OPEN_BILL' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                                </td>
+                                                <td className="p-3 max-w-[250px]">
+                                                    <div className="flex flex-wrap gap-1 items-center">
+                                                        {/* @ts-ignore */}
+                                                        {t.transaction_items?.map((i, idx) => (
+                                                            <span key={idx} className="inline-flex items-center gap-0.5 bg-gray-100 px-1.5 py-0.5 rounded text-[11px] text-gray-600">
+                                                                <span className="font-bold">{i.quantity}x</span> {i.item_name}
+                                                                {i.is_consignment && <Package className="w-2.5 h-2.5 text-amber-500" />}
+                                                            </span>
+                                                        ))}
+                                                        {t.voucher_code && (
+                                                            <span className="text-[10px] px-1 py-0.5 rounded border bg-yellow-50 text-yellow-700 border-yellow-200 font-mono">
+                                                                🎟 {t.voucher_code}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-3 text-right">
+                                                    <div className="font-bold text-brewasa-dark text-sm whitespace-nowrap">
+                                                        Rp {t.total_amount.toLocaleString('id-ID')}
+                                                    </div>
+                                                    {t.discount_amount > 0 && (
+                                                        <div className="text-[10px] text-green-600 font-medium">-Rp {t.discount_amount.toLocaleString('id-ID')}</div>
+                                                    )}
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <span className={`px-2 py-1 rounded text-[11px] font-bold border ${t.payment_method === 'OPEN_BILL' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
                                                         {t.payment_method === 'OPEN_BILL' ? 'OPEN BILL' : t.payment_method}
                                                     </span>
                                                     {t.payment_method === 'OPEN_BILL' && t.status !== 'COMPLETED' && (
                                                         <button
                                                             onClick={() => openPaymentModal(t)}
-                                                            className="p-1 text-brewasa-copper hover:bg-orange-50 rounded-full animate-pulse"
+                                                            className="ml-1 p-0.5 text-brewasa-copper hover:bg-orange-50 rounded-full animate-pulse"
                                                             title="Selesaikan Pembayaran"
                                                         >
-                                                            <DollarSign className="w-4 h-4" />
+                                                            <DollarSign className="w-3 h-3" />
                                                         </button>
                                                     )}
-                                                </div>
-                                            </td>
-                                            <td className="p-4">
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <div className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1 ${getStatusColor(t.status)}`}>
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <div className={`px-2 py-1 rounded-full text-[11px] font-bold border inline-flex items-center gap-1 ${getStatusColor(t.status)}`}>
                                                         {t.status === 'COMPLETED' && <CheckCircle className="w-3 h-3" />}
                                                         {t.status === 'CANCELLED' && <XCircle className="w-3 h-3" />}
                                                         {t.status === 'PENDING' && <AlertCircle className="w-3 h-3" />}
@@ -724,193 +841,357 @@ const TransactionHistory: React.FC = () => {
                                                     <select
                                                         value={t.status}
                                                         onChange={(e) => updateStatus(t.id, e.target.value)}
-                                                        className="text-xs border rounded px-1 py-0.5 bg-white hover:border-brewasa-copper cursor-pointer outline-none mb-1"
+                                                        className="text-[10px] border rounded px-1 py-0.5 bg-white hover:border-brewasa-copper cursor-pointer outline-none mt-1 block mx-auto"
                                                     >
                                                         <option value="PENDING">PENDING</option>
                                                         <option value="PROCESSING">PROCESSING</option>
                                                         <option value="COMPLETED">COMPLETED</option>
                                                         <option value="CANCELLED">CANCELLED</option>
                                                     </select>
-                                                    <button
-                                                        onClick={() => handlePrintReceipt(t)}
-                                                        className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"
-                                                        title="Cetak Struk"
-                                                    >
-                                                        <Printer className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => deleteTransaction(t.id)}
-                                                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
-                                                        title="Hapus Transaksi"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        {/* Voucher Notes Row (jika ada notes) */}
-                                        {t.voucher_notes && (
-                                            <tr className="bg-yellow-50/30 border-t border-yellow-100">
-                                                <td colSpan={9} className="p-3">
-                                                    <div className="bg-yellow-50 rounded-lg border border-yellow-200 p-3">
-                                                        <p className="text-xs font-bold text-yellow-800 mb-1">📝 Catatan Voucher:</p>
-                                                        <p className="text-xs text-yellow-700">{t.voucher_notes}</p>
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button onClick={() => openEditModal(t)} className="text-blue-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded" title="Edit Items">
+                                                            <Edit className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button onClick={() => handlePrintReceipt(t)} className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1 rounded" title="Cetak Struk">
+                                                            <Printer className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button onClick={() => deleteTransaction(t.id)} className="text-red-400 hover:text-red-700 hover:bg-red-50 p-1 rounded" title="Hapus">
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>
+                                            {t.voucher_notes && (
+                                                <tr className="bg-yellow-50/30 border-t border-yellow-100">
+                                                    <td colSpan={7} className="p-2 px-3">
+                                                        <p className="text-[11px] text-yellow-700"><span className="font-bold">📝 Catatan:</span> {t.voucher_notes}</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Mobile Cards (hidden on desktop) */}
+                        <div className="md:hidden divide-y divide-gray-100">
+                            {filtered.length === 0 && (
+                                <div className="p-8 text-center text-gray-400">Tidak ada data transaksi.</div>
+                            )}
+                            {filtered.map(t => (
+                                <div key={t.id} className="p-4 space-y-3">
+                                    {/* Header: Date + Status */}
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <div className="font-mono text-[10px] text-gray-400">#{t.id.slice(0, 8)}</div>
+                                            <div className="text-xs text-gray-600 flex items-center gap-1 mt-0.5">
+                                                <Calendar className="w-3 h-3" />
+                                                {new Date(t.created_at).toLocaleDateString('id-ID')}
+                                                <Clock className="w-3 h-3 ml-1" />
+                                                {new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                        <div className={`px-2 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1 ${getStatusColor(t.status)}`}>
+                                            {t.status === 'COMPLETED' && <CheckCircle className="w-3 h-3" />}
+                                            {t.status === 'CANCELLED' && <XCircle className="w-3 h-3" />}
+                                            {t.status === 'PENDING' && <AlertCircle className="w-3 h-3" />}
+                                            {t.status}
+                                        </div>
+                                    </div>
+
+                                    {/* Customer + Type */}
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 rounded-full bg-brewasa-cream/50 flex items-center justify-center text-brewasa-dark text-xs border border-brewasa-cream shrink-0">
+                                                <User className="w-3 h-3" />
+                                            </div>
+                                            <span className="text-sm font-medium text-gray-800">{t.customer_name || 'Tanpa Nama'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-blue-50 text-blue-600 border-blue-100">
+                                                {t.order_type?.replace('_', ' ') || 'DINE IN'}
+                                            </span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${t.payment_method === 'OPEN_BILL' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                                {t.payment_method === 'OPEN_BILL' ? 'OPEN' : t.payment_method}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Items */}
+                                    <div className="flex flex-wrap gap-1">
+                                        {/* @ts-ignore */}
+                                        {t.transaction_items?.map((i, idx) => (
+                                            <span key={idx} className="inline-flex items-center gap-0.5 bg-gray-100 px-1.5 py-0.5 rounded text-[11px] text-gray-600">
+                                                <span className="font-bold">{i.quantity}x</span> {i.item_name}
+                                                {i.is_consignment && <Package className="w-2.5 h-2.5 text-amber-500" />}
+                                            </span>
+                                        ))}
+                                        {t.voucher_code && (
+                                            <span className="text-[10px] px-1 py-0.5 rounded border bg-yellow-50 text-yellow-700 border-yellow-200 font-mono">
+                                                🎟 {t.voucher_code}
+                                            </span>
                                         )}
-                                    </React.Fragment>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                    </div>
+
+                                    {/* Total */}
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <div className="text-lg font-bold text-brewasa-dark">
+                                                Rp {t.total_amount.toLocaleString('id-ID')}
+                                            </div>
+                                            {t.discount_amount > 0 && (
+                                                <div className="text-[11px] text-green-600 font-medium">Diskon: -Rp {t.discount_amount.toLocaleString('id-ID')}</div>
+                                            )}
+                                        </div>
+                                        {t.payment_method === 'OPEN_BILL' && t.status !== 'COMPLETED' && (
+                                            <button
+                                                onClick={() => openPaymentModal(t)}
+                                                className="px-4 py-2 bg-brewasa-copper text-white rounded-xl font-bold text-sm flex items-center gap-2 animate-pulse shadow-md"
+                                            >
+                                                <DollarSign className="w-4 h-4" /> Bayar
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Status Selector - full width */}
+                                    <select
+                                        value={t.status}
+                                        onChange={(e) => updateStatus(t.id, e.target.value)}
+                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold bg-white cursor-pointer outline-none focus:border-brewasa-copper transition-colors"
+                                    >
+                                        <option value="PENDING">⏳ PENDING</option>
+                                        <option value="PROCESSING">🔄 PROCESSING</option>
+                                        <option value="COMPLETED">✅ COMPLETED</option>
+                                        <option value="CANCELLED">❌ CANCELLED</option>
+                                    </select>
+
+                                    {/* Action Buttons - large, labeled */}
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button
+                                            onClick={() => openEditModal(t)}
+                                            className="flex items-center justify-center gap-1.5 py-2.5 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs border border-blue-100 active:bg-blue-100 transition-colors"
+                                        >
+                                            <Edit className="w-4 h-4" /> Edit
+                                        </button>
+                                        <button
+                                            onClick={() => handlePrintReceipt(t)}
+                                            className="flex items-center justify-center gap-1.5 py-2.5 bg-gray-50 text-gray-600 rounded-xl font-bold text-xs border border-gray-200 active:bg-gray-100 transition-colors"
+                                        >
+                                            <Printer className="w-4 h-4" /> Print
+                                        </button>
+                                        <button
+                                            onClick={() => deleteTransaction(t.id)}
+                                            className="flex items-center justify-center gap-1.5 py-2.5 bg-red-50 text-red-500 rounded-xl font-bold text-xs border border-red-100 active:bg-red-100 transition-colors"
+                                        >
+                                            <Trash2 className="w-4 h-4" /> Hapus
+                                        </button>
+                                    </div>
+
+                                    {/* Voucher Notes */}
+                                    {t.voucher_notes && (
+                                        <div className="bg-yellow-50 rounded-lg border border-yellow-200 p-2">
+                                            <p className="text-[11px] text-yellow-700"><span className="font-bold">📝</span> {t.voucher_notes}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </>
                 )}
             </div>
             {/* Edit Items Modal */}
-            {isEditModalOpen && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="font-bold text-lg">Edit Item Transaksi</h3>
-                            <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-gray-200 rounded-full">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
+            {
+                isEditModalOpen && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                                <h3 className="font-bold text-lg">Edit Item Transaksi</h3>
+                                <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-gray-200 rounded-full">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
 
-                        <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
-                            {/* Current Items Table */}
-                            <table className="w-full text-sm mb-6">
-                                <thead className="bg-gray-50 text-gray-500">
-                                    <tr>
-                                        <th className="p-2 text-left">Item</th>
-                                        <th className="p-2 text-center">Qty</th>
-                                        <th className="p-2 text-right">Harga</th>
-                                        <th className="p-2 text-right">Subtotal</th>
-                                        <th className="p-2 w-10"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {editItems.map((item, idx) => (
-                                        <tr key={idx} className="border-b">
-                                            <td className="p-2">{item.item_name}</td>
-                                            <td className="p-2 text-center">{item.quantity}</td>
-                                            <td className="p-2 text-right">{item.price.toLocaleString('id-ID')}</td>
-                                            <td className="p-2 text-right">{(item.price * item.quantity).toLocaleString('id-ID')}</td>
-                                            <td className="p-2">
-                                                <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:text-red-700">
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                            <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
+                                {/* Current Items Table */}
+                                <table className="w-full text-sm mb-6">
+                                    <thead className="bg-gray-50 text-gray-500">
+                                        <tr>
+                                            <th className="p-2 text-left">Item</th>
+                                            <th className="p-2 text-center">Qty</th>
+                                            <th className="p-2 text-right">Harga</th>
+                                            <th className="p-2 text-center">Titipan</th>
+                                            <th className="p-2 text-right">Modal</th>
+                                            <th className="p-2 w-10"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {editItems.map((item, idx) => (
+                                            <tr key={idx} className={`border-b ${item.is_consignment ? 'bg-amber-50/50' : ''}`}>
+                                                <td className="p-2">
+                                                    <div className="flex items-center gap-1">
+                                                        {item.item_name}
+                                                        {item.is_consignment && <Package className="w-3 h-3 text-amber-600" />}
+                                                    </div>
+                                                </td>
+                                                <td className="p-2 text-center">{item.quantity}</td>
+                                                <td className="p-2 text-right">{item.price.toLocaleString('id-ID')}</td>
+                                                <td className="p-2 text-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                                                        checked={item.is_consignment ?? false}
+                                                        onChange={e => {
+                                                            const updated = [...editItems];
+                                                            updated[idx] = { ...updated[idx], is_consignment: e.target.checked, consignment_cost: e.target.checked ? (updated[idx].consignment_cost || 0) : 0 };
+                                                            setEditItems(updated);
+                                                        }}
+                                                    />
+                                                </td>
+                                                <td className="p-2 text-right">
+                                                    {item.is_consignment ? (
+                                                        <input
+                                                            type="number"
+                                                            className="w-24 p-1 border border-amber-300 rounded text-sm text-right bg-white font-mono"
+                                                            placeholder="Modal"
+                                                            value={item.consignment_cost || ''}
+                                                            onChange={e => {
+                                                                const updated = [...editItems];
+                                                                updated[idx] = { ...updated[idx], consignment_cost: parseInt(e.target.value) || 0 };
+                                                                setEditItems(updated);
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-gray-300">-</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-2">
+                                                    <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:text-red-700">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="font-bold text-lg bg-gray-50">
+                                            <td colSpan={4} className="p-2 text-right">Total Baru:</td>
+                                            <td className="p-2 text-right" colSpan={2}>
+                                                Rp {editItems.reduce((acc, i) => acc + (i.price * i.quantity), 0).toLocaleString('id-ID')}
                                             </td>
                                         </tr>
-                                    ))}
-                                </tbody>
-                                <tfoot>
-                                    <tr className="font-bold text-lg bg-gray-50">
-                                        <td colSpan={3} className="p-2 text-right">Total Baru:</td>
-                                        <td className="p-2 text-right">
-                                            Rp {editItems.reduce((acc, i) => acc + (i.price * i.quantity), 0).toLocaleString('id-ID')}
-                                        </td>
-                                        <td></td>
-                                    </tr>
-                                </tfoot>
-                            </table>
+                                        {editItems.some(i => i.is_consignment) && (
+                                            <tr className="text-sm bg-amber-50">
+                                                <td colSpan={4} className="p-2 text-right text-amber-700 font-bold">Profit Titipan:</td>
+                                                <td className="p-2 text-right text-amber-700 font-bold" colSpan={2}>
+                                                    Rp {editItems.filter(i => i.is_consignment).reduce((acc, i) => acc + ((i.price - (i.consignment_cost || 0)) * i.quantity), 0).toLocaleString('id-ID')}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tfoot>
+                                </table>
 
-                            {/* Add Item Form */}
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                                <h4 className="font-bold text-sm mb-3 text-gray-700">Tambah Item Baru</h4>
-                                <div className="flex gap-2">
-                                    <select
-                                        value={newItemId}
-                                        onChange={e => setNewItemId(e.target.value)}
-                                        className="flex-1 p-2 border rounded-lg text-sm bg-white"
-                                    >
-                                        <option value="">-- Pilih Menu --</option>
-                                        {menuItems.map(m => (
-                                            <option key={m.id} value={m.id}>{m.name} - Rp {parseInt(m.price).toLocaleString('id-ID')}</option>
-                                        ))}
-                                    </select>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={newItemQty}
-                                        onChange={e => setNewItemQty(parseInt(e.target.value))}
-                                        className="w-20 p-2 border rounded-lg text-sm bg-white text-center"
-                                    />
-                                    <button
-                                        onClick={handleAddItem}
-                                        disabled={!newItemId}
-                                        className="bg-brewasa-dark text-white px-4 py-2 rounded-lg font-bold hover:bg-brewasa-copper disabled:opacity-50"
-                                    >
-                                        <Plus className="w-5 h-5" />
-                                    </button>
+                                {/* Add Item Form */}
+                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                    <h4 className="font-bold text-sm mb-3 text-gray-700">Tambah Item Baru</h4>
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={newItemId}
+                                            onChange={e => setNewItemId(e.target.value)}
+                                            className="flex-1 p-2 border rounded-lg text-sm bg-white"
+                                        >
+                                            <option value="">-- Pilih Menu --</option>
+                                            {menuItems.map(m => (
+                                                <option key={m.id} value={m.id}>{m.name} - Rp {parseInt(m.price).toLocaleString('id-ID')}</option>
+                                            ))}
+                                        </select>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={newItemQty}
+                                            onChange={e => setNewItemQty(parseInt(e.target.value))}
+                                            className="w-20 p-2 border rounded-lg text-sm bg-white text-center"
+                                        />
+                                        <button
+                                            onClick={handleAddItem}
+                                            disabled={!newItemId}
+                                            className="bg-brewasa-dark text-white px-4 py-2 rounded-lg font-bold hover:bg-brewasa-copper disabled:opacity-50"
+                                        >
+                                            <Plus className="w-5 h-5" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
-                            <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">Batal</button>
-                            <button onClick={saveEditedItems} className="px-4 py-2 bg-brewasa-dark text-white font-bold rounded-lg hover:bg-brewasa-copper">Simpan Perubahan</button>
+                            <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
+                                <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg">Batal</button>
+                                <button onClick={saveEditedItems} className="px-4 py-2 bg-brewasa-dark text-white font-bold rounded-lg hover:bg-brewasa-copper">Simpan Perubahan</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Payment Completion Modal */}
-            {isPaymentModalOpen && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
-                        <div className="p-4 border-b bg-gray-50">
-                            <h3 className="font-bold text-lg text-center">Selesaikan Pembayaran</h3>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-sm text-center text-gray-500 mb-6">Pilih metode pembayaran untuk menyelesaikan transaksi ini.</p>
+            {
+                isPaymentModalOpen && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+                            <div className="p-4 border-b bg-gray-50">
+                                <h3 className="font-bold text-lg text-center">Selesaikan Pembayaran</h3>
+                            </div>
+                            <div className="p-6">
+                                <p className="text-sm text-center text-gray-500 mb-6">Pilih metode pembayaran untuk menyelesaikan transaksi ini.</p>
 
-                            <div className="space-y-3">
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={() => setSelectedPaymentMethod('CASH')}
+                                        className={`w-full p-4 rounded-xl border-2 flex items-center gap-3 transition-colors ${selectedPaymentMethod === 'CASH' ? 'border-brewasa-copper bg-orange-50 text-brewasa-dark' : 'border-gray-200 hover:bg-gray-50'}`}
+                                    >
+                                        <Banknote className="w-6 h-6" />
+                                        <span className="font-extrabold flex-1 text-left">TUNAI / CASH</span>
+                                        {selectedPaymentMethod === 'CASH' && <CheckCircle className="w-5 h-5 text-brewasa-copper" />}
+                                    </button>
+
+                                    <button
+                                        onClick={() => setSelectedPaymentMethod('QRIS')}
+                                        className={`w-full p-4 rounded-xl border-2 flex items-center gap-3 transition-colors ${selectedPaymentMethod === 'QRIS' ? 'border-brewasa-copper bg-orange-50 text-brewasa-dark' : 'border-gray-200 hover:bg-gray-50'}`}
+                                    >
+                                        <QrCode className="w-6 h-6" />
+                                        <span className="font-extrabold flex-1 text-left">QRIS</span>
+                                        {selectedPaymentMethod === 'QRIS' && <CheckCircle className="w-5 h-5 text-brewasa-copper" />}
+                                    </button>
+
+                                    <button
+                                        onClick={() => setSelectedPaymentMethod('TRANSFER')}
+                                        className={`w-full p-4 rounded-xl border-2 flex items-center gap-3 transition-colors ${selectedPaymentMethod === 'TRANSFER' ? 'border-brewasa-copper bg-orange-50 text-brewasa-dark' : 'border-gray-200 hover:bg-gray-50'}`}
+                                    >
+                                        <CreditCard className="w-6 h-6" />
+                                        <span className="font-extrabold flex-1 text-left">TRANSFER BANK</span>
+                                        {selectedPaymentMethod === 'TRANSFER' && <CheckCircle className="w-5 h-5 text-brewasa-copper" />}
+                                    </button>
+                                </div>
+
                                 <button
-                                    onClick={() => setSelectedPaymentMethod('CASH')}
-                                    className={`w-full p-4 rounded-xl border-2 flex items-center gap-3 transition-colors ${selectedPaymentMethod === 'CASH' ? 'border-brewasa-copper bg-orange-50 text-brewasa-dark' : 'border-gray-200 hover:bg-gray-50'}`}
+                                    onClick={completePayment}
+                                    className="w-full mt-6 py-3 bg-green-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 shadow-lg"
                                 >
-                                    <Banknote className="w-6 h-6" />
-                                    <span className="font-extrabold flex-1 text-left">TUNAI / CASH</span>
-                                    {selectedPaymentMethod === 'CASH' && <CheckCircle className="w-5 h-5 text-brewasa-copper" />}
+                                    <CheckCircle className="w-5 h-5" />
+                                    Bayar & Selesai
                                 </button>
-
                                 <button
-                                    onClick={() => setSelectedPaymentMethod('QRIS')}
-                                    className={`w-full p-4 rounded-xl border-2 flex items-center gap-3 transition-colors ${selectedPaymentMethod === 'QRIS' ? 'border-brewasa-copper bg-orange-50 text-brewasa-dark' : 'border-gray-200 hover:bg-gray-50'}`}
+                                    onClick={() => setIsPaymentModalOpen(false)}
+                                    className="w-full mt-3 py-2 text-gray-500 font-bold hover:text-gray-700"
                                 >
-                                    <QrCode className="w-6 h-6" />
-                                    <span className="font-extrabold flex-1 text-left">QRIS</span>
-                                    {selectedPaymentMethod === 'QRIS' && <CheckCircle className="w-5 h-5 text-brewasa-copper" />}
-                                </button>
-
-                                <button
-                                    onClick={() => setSelectedPaymentMethod('TRANSFER')}
-                                    className={`w-full p-4 rounded-xl border-2 flex items-center gap-3 transition-colors ${selectedPaymentMethod === 'TRANSFER' ? 'border-brewasa-copper bg-orange-50 text-brewasa-dark' : 'border-gray-200 hover:bg-gray-50'}`}
-                                >
-                                    <CreditCard className="w-6 h-6" />
-                                    <span className="font-extrabold flex-1 text-left">TRANSFER BANK</span>
-                                    {selectedPaymentMethod === 'TRANSFER' && <CheckCircle className="w-5 h-5 text-brewasa-copper" />}
+                                    Batal
                                 </button>
                             </div>
-
-                            <button
-                                onClick={completePayment}
-                                className="w-full mt-6 py-3 bg-green-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 shadow-lg"
-                            >
-                                <CheckCircle className="w-5 h-5" />
-                                Bayar & Selesai
-                            </button>
-                            <button
-                                onClick={() => setIsPaymentModalOpen(false)}
-                                className="w-full mt-3 py-2 text-gray-500 font-bold hover:text-gray-700"
-                            >
-                                Batal
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </div >
     );
 };
