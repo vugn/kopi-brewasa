@@ -10,6 +10,7 @@ import InventoryManager from '../components/admin/InventoryManager';
 import CostingManager from '../components/admin/CostingManager';
 import ExportManager from '../components/admin/ExportManager';
 import NotesManager from '../components/admin/NotesManager';
+import FinanceManager from '../components/admin/FinanceManager';
 import { Package, Calculator } from 'lucide-react';
 
 const Admin: React.FC = () => {
@@ -144,6 +145,7 @@ const Admin: React.FC = () => {
                     {[
                         { id: 'pos', label: 'Mode Kasir (POS)' },
                         { id: 'history', label: 'Riwayat Transaksi' },
+                        { id: 'finance', label: 'Keuangan' },
                         { id: 'menu', label: 'Menu Manager' },
                         { id: 'stories', label: 'Story Moderation' },
                         { id: 'announcements', label: 'Announcements' },
@@ -186,6 +188,7 @@ const Admin: React.FC = () => {
             <main className="flex-1 p-4 md:p-8 bg-gray-50 min-h-screen overflow-y-auto w-full">
                 {activeTab === 'pos' && <PosSystem />}
                 {activeTab === 'history' && <TransactionHistory />}
+                {activeTab === 'finance' && <FinanceManager />}
                 {activeTab === 'menu' && <MenuManager />}
                 {activeTab === 'stories' && <StoryModerator />}
                 {activeTab === 'announcements' && <AnnouncementManager />}
