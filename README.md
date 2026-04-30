@@ -10,11 +10,12 @@ View your app in AI Studio: https://ai.studio/apps/temp/1
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js
 
 1. Install dependencies:
    `npm install`
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+If you want QRIS payments to show a dynamic QR in the POS modal, set `VITE_STATIC_QRIS_STRING` in [.env.local](.env.local) to your static merchant QRIS string.

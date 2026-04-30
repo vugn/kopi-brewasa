@@ -93,6 +93,34 @@ const MenuManager: React.FC = () => {
     const handleDelete = async (id: string) => {
         if (!window.confirm('Yakin ingin menghapus menu ini?')) return;
 
+        const { count, error: countError } = await supabase
+            .from('transaction_items')
+            .select('id', { count: 'exact', head: true })
+            .eq('menu_item_id', id);
+
+        if (countError) {
+            alert('Gagal mengecek histori transaksi: ' + countError.message);
+            return;
+        }
+
+        if ((count ?? 0) > 0) {
+            const { error: hideError } = await supabase
+                .from('menu_items')
+                .update({ is_available: false })
+                .eq('id', id);
+
+            if (hideError) {
+                alert('Menu pernah dipakai transaksi dan gagal disembunyikan: ' + hideError.message);
+                return;
+            }
+
+            setItems(items.map(item =>
+                item.id === id ? { ...item, is_available: false, isAvailable: false } : item
+            ));
+            alert('Menu sudah pernah dipakai transaksi, jadi disembunyikan agar histori tetap aman.');
+            return;
+        }
+
         const { error } = await supabase
             .from('menu_items')
             .delete()

@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, Calculator, X, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import QRCode from 'qrcode';
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, Calculator, X, ChevronDown, ChevronUp, Package, QrCode } from 'lucide-react';
 import { MenuItem } from '../../types';
 import PrinterConnection from './PrinterConnection';
 import { bluetoothPrinter } from '../../utils/bluetoothPrinter';
+import { convertQRIS, validateQRIS } from '../../utils/qrisDynamic';
+
+const STATIC_QRIS_ENV = import.meta.env.VITE_STATIC_QRIS_STRING?.trim() ?? '';
 
 interface CartItem extends MenuItem {
     quantity: number;
@@ -29,6 +33,11 @@ const PosSystem: React.FC = () => {
     const [voucherCode, setVoucherCode] = useState('');
     const [voucherNotes, setVoucherNotes] = useState('');
     const [processing, setProcessing] = useState(false);
+    const [qrisStaticString, setQrisStaticString] = useState(() =>
+        STATIC_QRIS_ENV || localStorage.getItem('kopi-brewasa.staticQris') || ''
+    );
+    const [qrisPreviewUrl, setQrisPreviewUrl] = useState('');
+    const [qrisPreviewError, setQrisPreviewError] = useState('');
 
     // New Features State
     const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'MAIN' | 'ADDON' | 'SPECIAL'>('ALL');
@@ -42,8 +51,22 @@ const PosSystem: React.FC = () => {
     }, []);
 
     const fetchMenu = async () => {
-        const { data } = await supabase.from('menu_items').select('*').order('name');
-        if (data) setMenuItems(data);
+        const { data, error } = await supabase.from('menu_items').select('*').order('name');
+
+        if (error) {
+            console.error('Error fetching menu:', error);
+        } else if (data) {
+            const visibleItems = data
+                .map((item: any) => ({
+                    ...item,
+                    forWhat: item.for_what,
+                    isAvailable: item.is_available !== false,
+                }))
+                .filter((item: any) => item.isAvailable);
+
+            setMenuItems(visibleItems);
+        }
+
         setLoading(false);
     };
 
@@ -71,6 +94,12 @@ const PosSystem: React.FC = () => {
     const formatNumber = (num: number) => num.toLocaleString('id-ID');
     const parsePrice = (priceStr: string) => parseInt(priceStr.toLowerCase().replace('k', '000').replace(/[^0-9]/g, ''));
 
+    useEffect(() => {
+        if (!STATIC_QRIS_ENV) {
+            localStorage.setItem('kopi-brewasa.staticQris', qrisStaticString);
+        }
+    }, [qrisStaticString]);
+
     const totalAmount = cart.reduce((sum, item) => {
         return sum + (parsePrice(item.price) * item.quantity);
     }, 0);
@@ -80,10 +109,6 @@ const PosSystem: React.FC = () => {
     const filteredMenu = menuItems.filter(item => {
         const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-
-        // Filter HIDDEN items (unless specifically looking for them? No, POS should hide them)
-        // Assume is_available defaults to true if undefined
-        // const isAvailable = item.is_available !== false; // REMOVED: Staff should see hidden items
 
         const matchesCategory = selectedCategory === 'ALL' || (item.category || 'MAIN') === selectedCategory;
 
@@ -104,6 +129,64 @@ const PosSystem: React.FC = () => {
     }
 
     const finalTotal = Math.max(0, totalAmount - discountNum);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (paymentMethod !== 'QRIS') {
+            setQrisPreviewUrl('');
+            setQrisPreviewError('');
+            return;
+        }
+
+        const staticQris = qrisStaticString.trim();
+        if (!staticQris) {
+            setQrisPreviewUrl('');
+            setQrisPreviewError('Tempel QRIS statik merchant untuk menampilkan QR dinamis.');
+            return;
+        }
+
+        const validation = validateQRIS(staticQris);
+        if (!validation.valid) {
+            setQrisPreviewUrl('');
+            setQrisPreviewError(validation.errors[0] || 'QRIS statik tidak valid.');
+            return;
+        }
+
+        if (finalTotal <= 0) {
+            setQrisPreviewUrl('');
+            setQrisPreviewError('Total transaksi harus lebih dari 0 untuk membuat QRIS.');
+            return;
+        }
+
+        const dynamicQris = convertQRIS(staticQris, { amount: finalTotal });
+
+        QRCode.toDataURL(dynamicQris, {
+            width: 280,
+            margin: 2,
+            errorCorrectionLevel: 'M',
+            color: {
+                dark: '#111111',
+                light: '#FFFFFF'
+            }
+        })
+            .then((dataUrl: string) => {
+                if (!cancelled) {
+                    setQrisPreviewUrl(dataUrl);
+                    setQrisPreviewError('');
+                }
+            })
+            .catch((error: Error) => {
+                if (!cancelled) {
+                    setQrisPreviewUrl('');
+                    setQrisPreviewError('Gagal membuat QRIS dinamis: ' + error.message);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [paymentMethod, qrisStaticString, finalTotal]);
 
     // Smart Change Logic
     const cashGivenNum = parseInt(cashGiven.replace(/\./g, '')) || 0;
@@ -452,18 +535,18 @@ const PosSystem: React.FC = () => {
 
             {/* Payment Modal */}
             {showPaymentModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4">
+                    <div className="bg-white rounded-3xl w-full max-w-4xl xl:max-w-5xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden">
                         {/* Header - Pinned */}
-                        <div className="p-6 border-b flex justify-between items-center bg-gray-50 flex-shrink-0">
-                            <h3 className="font-bold text-xl">Pembayaran</h3>
+                        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b flex justify-between items-center bg-gray-50 flex-shrink-0">
+                            <h3 className="font-bold text-lg sm:text-xl">Pembayaran</h3>
                             <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
                         {/* Scrollable Body */}
-                        <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                        <div className="px-4 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6 flex-1 overflow-y-auto custom-scrollbar">
                             {/* Customer Name */}
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">Nama Customer</label>
@@ -524,6 +607,34 @@ const PosSystem: React.FC = () => {
                                     ))}
                                 </div>
                             </div>
+
+                            {paymentMethod === 'QRIS' && (
+                                <div className="pt-2 sm:pt-4">
+                                    <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-50 via-white to-amber-50 border border-emerald-100 shadow-[0_20px_70px_-25px_rgba(0,0,0,0.18)] p-4 sm:p-5 md:p-6">
+                                        <div className="absolute inset-0 pointer-events-none opacity-60 [background-image:radial-gradient(circle_at_top_right,rgba(16,185,129,0.14),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(245,158,11,0.10),transparent_28%)]" />
+
+                                        <div className="relative flex items-center justify-center">
+                                            <div className="rounded-3xl bg-white p-3 sm:p-4 md:p-5 shadow-lg border border-gray-100 w-full max-w-[92vw] sm:max-w-[30rem] md:max-w-[36rem] lg:max-w-[40rem]">
+                                                {qrisPreviewUrl ? (
+                                                    <img
+                                                        src={qrisPreviewUrl}
+                                                        alt="QRIS dinamis"
+                                                        className="w-full aspect-square object-contain select-none"
+                                                        draggable={false}
+                                                    />
+                                                ) : (
+                                                    <div className="w-full aspect-square rounded-2xl bg-gray-50 flex items-center justify-center">
+                                                        <div className="flex flex-col items-center gap-3 text-gray-400">
+                                                            <QrCode className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16" />
+                                                            <div className="h-1.5 w-20 rounded-full bg-gray-200 animate-pulse" />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Voucher Section */}
                             <div className="space-y-4 border-t pt-4">
@@ -643,22 +754,6 @@ const PosSystem: React.FC = () => {
                                         )}
                                     </div>
 
-                                    {/* Open Bill Message */}
-                                    {paymentMethod === 'OPEN_BILL' && (
-                                        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl flex items-start gap-3">
-                                            <div className="bg-yellow-100 p-2 rounded-full text-yellow-600 shrink-0">
-                                                <Calculator className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-yellow-800 font-bold">Open Bill / Kasbon</p>
-                                                <p className="text-sm text-yellow-700 mt-1">
-                                                    Transaksi akan disimpan sebagai <span className="font-bold">PENDING</span>.
-                                                    Pembayaran dapat dilakukan nanti melalui menu Riwayat Transaksi.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-
                                     {/* Smart Change Suggestion */}
                                     {suggestion && change >= 0 && paymentMethod === 'CASH' && (
                                         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
@@ -674,6 +769,22 @@ const PosSystem: React.FC = () => {
                                             </div>
                                         </div>
                                     )}
+
+                                </div>
+                            )}
+
+                            {paymentMethod === 'OPEN_BILL' && (
+                                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl flex items-start gap-3">
+                                    <div className="bg-yellow-100 p-2 rounded-full text-yellow-600 shrink-0">
+                                        <Calculator className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-yellow-800 font-bold">Open Bill / Kasbon</p>
+                                        <p className="text-sm text-yellow-700 mt-1">
+                                            Transaksi akan disimpan sebagai <span className="font-bold">PENDING</span>.
+                                            Pembayaran dapat dilakukan nanti melalui menu Riwayat Transaksi.
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -687,7 +798,8 @@ const PosSystem: React.FC = () => {
                             >
                                 {processing ? 'Memproses...' :
                                     paymentMethod === 'OPEN_BILL' ? 'Simpan Open Bill (Pending)' :
-                                        `Selesaikan (Rp ${formatNumber(finalTotal)})`}
+                                        paymentMethod === 'QRIS' ? 'Selesaikan Setelah Pembayaran Masuk' :
+                                            `Selesaikan (Rp ${formatNumber(finalTotal)})`}
                             </button>
                         </div>
                     </div>

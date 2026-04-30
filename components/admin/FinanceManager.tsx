@@ -138,19 +138,23 @@ const FinanceManager: React.FC = () => {
             (acc, row) => {
                 if (row.type === 'INCOME') {
                     acc.income += row.amount;
+                    if (row.payment_method === 'CASH') {
+                        acc.income_cash += row.amount;
+                    } else {
+                        acc.income_qris += row.amount;
+                    }
                 } else {
                     acc.expense += row.amount;
-                }
-
-                if (row.payment_method === 'CASH') {
-                    acc.cash += row.amount;
-                } else {
-                    acc.qris += row.amount;
+                    if (row.payment_method === 'CASH') {
+                        acc.expense_cash += row.amount;
+                    } else {
+                        acc.expense_qris += row.amount;
+                    }
                 }
 
                 return acc;
             },
-            { income: 0, expense: 0, cash: 0, qris: 0 }
+            { income: 0, expense: 0, income_cash: 0, income_qris: 0, expense_cash: 0, expense_qris: 0 }
         );
     }, [filteredRecords]);
 
@@ -218,15 +222,23 @@ const FinanceManager: React.FC = () => {
                     <p className="text-base md:text-xl font-bold text-red-600">Rp {summary.expense.toLocaleString('id-ID')}</p>
                 </div>
                 <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                    <p className="text-xs text-gray-500">Net</p>
+                    <p className="text-xs text-gray-500">Net Keseluruhan</p>
                     <p className={`text-base md:text-xl font-bold ${summary.income - summary.expense >= 0 ? 'text-brewasa-dark' : 'text-red-600'}`}>
                         Rp {(summary.income - summary.expense).toLocaleString('id-ID')}
                     </p>
                 </div>
-                <div className="col-span-2 lg:col-span-1 bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                    <p className="text-xs text-gray-500">Cash / QRIS</p>
-                    <p className="text-sm font-bold text-brewasa-dark">Cash: Rp {summary.cash.toLocaleString('id-ID')}</p>
-                    <p className="text-sm font-bold text-brewasa-dark">QRIS: Rp {summary.qris.toLocaleString('id-ID')}</p>
+                <div className="col-span-2 lg:col-span-1 bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex flex-col justify-center">
+                    <p className="text-xs text-gray-500 mb-1">Net Cash & QRIS</p>
+                    <div className="flex justify-between items-center">
+                        <p className={`text-sm font-bold ${(summary.income_cash - summary.expense_cash) >= 0 ? 'text-brewasa-dark' : 'text-red-600'}`}>
+                            Cash: Rp {(summary.income_cash - summary.expense_cash).toLocaleString('id-ID')}
+                        </p>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <p className={`text-sm font-bold ${(summary.income_qris - summary.expense_qris) >= 0 ? 'text-brewasa-dark' : 'text-red-600'}`}>
+                            QRIS: Rp {(summary.income_qris - summary.expense_qris).toLocaleString('id-ID')}
+                        </p>
+                    </div>
                 </div>
             </div>
 
