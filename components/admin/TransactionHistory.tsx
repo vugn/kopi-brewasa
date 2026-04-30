@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { Search, Filter, Loader2, Calendar, User, ShoppingBag, Clock, CheckCircle, XCircle, AlertCircle, Download, TrendingUp, DollarSign, Trash2, Edit, Plus, Minus, X, CreditCard, Banknote, QrCode, Printer, Package, ChevronDown } from 'lucide-react';
+import QRCode from 'qrcode';
+import { convertQRIS, validateQRIS } from '../../utils/qrisDynamic';
+
+const STATIC_QRIS_ENV = import.meta.env.VITE_STATIC_QRIS_STRING?.trim() ?? '';
 import * as XLSX from 'xlsx';
 import { bluetoothPrinter } from '../../utils/bluetoothPrinter';
 
@@ -67,6 +71,102 @@ const TransactionHistory: React.FC = () => {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [paymentTransaction, setPaymentTransaction] = useState<Transaction | null>(null);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
+
+    // QRIS QR Code State
+    const [qrisStaticString] = useState(() =>
+        STATIC_QRIS_ENV || localStorage.getItem('kopi-brewasa.staticQris') || ''
+    );
+    const [qrisPreviewUrl, setQrisPreviewUrl] = useState('');
+    const [qrisPreviewError, setQrisPreviewError] = useState('');
+
+    // Generate QRIS QR code when payment method is QRIS and modal is open
+    const generateQrisQrCode = useCallback(async (amount: number) => {
+        const staticQris = qrisStaticString.trim();
+        if (!staticQris) {
+            setQrisPreviewUrl('');
+            setQrisPreviewError('QRIS statik merchant belum diatur. Atur di halaman POS terlebih dahulu.');
+            return;
+        }
+
+        const validation = validateQRIS(staticQris);
+        if (!validation.valid) {
+            setQrisPreviewUrl('');
+            setQrisPreviewError(validation.errors[0] || 'QRIS statik tidak valid.');
+            return;
+        }
+
+        if (amount <= 0) {
+            setQrisPreviewUrl('');
+            setQrisPreviewError('Total transaksi harus lebih dari 0.');
+            return;
+        }
+
+        try {
+            const dynamicQris = convertQRIS(staticQris, { amount });
+            const qrCanvas = document.createElement('canvas');
+            const qrSize = 960;
+
+            await QRCode.toCanvas(qrCanvas, dynamicQris, {
+                width: qrSize,
+                margin: 3,
+                errorCorrectionLevel: 'H',
+                color: { dark: '#111111', light: '#FFFFFF' }
+            });
+
+            // Try to overlay logo
+            try {
+                const logo = new Image();
+                logo.src = '/logo-icon.png';
+                await new Promise<void>((resolve, reject) => {
+                    logo.onload = () => resolve();
+                    logo.onerror = () => reject(new Error('Logo tidak bisa dimuat'));
+                });
+
+                const context = qrCanvas.getContext('2d');
+                if (context) {
+                    const logoSize = qrSize * 0.18;
+                    const logoX = (qrSize - logoSize) / 2;
+                    const logoY = (qrSize - logoSize) / 2;
+                    const radius = qrSize * 0.03;
+
+                    context.save();
+                    context.fillStyle = '#FFFFFF';
+                    context.beginPath();
+                    context.moveTo(logoX + radius, logoY);
+                    context.lineTo(logoX + logoSize - radius, logoY);
+                    context.quadraticCurveTo(logoX + logoSize, logoY, logoX + logoSize, logoY + radius);
+                    context.lineTo(logoX + logoSize, logoY + logoSize - radius);
+                    context.quadraticCurveTo(logoX + logoSize, logoY + logoSize, logoX + logoSize - radius, logoY + logoSize);
+                    context.lineTo(logoX + radius, logoY + logoSize);
+                    context.quadraticCurveTo(logoX, logoY + logoSize, logoX, logoY + logoSize - radius);
+                    context.lineTo(logoX, logoY + radius);
+                    context.quadraticCurveTo(logoX, logoY, logoX + radius, logoY);
+                    context.closePath();
+                    context.fill();
+                    context.drawImage(logo, logoX + logoSize * 0.12, logoY + logoSize * 0.12, logoSize * 0.76, logoSize * 0.76);
+                    context.restore();
+                }
+            } catch {
+                // Logo overlay failed, QR still valid
+            }
+
+            setQrisPreviewUrl(qrCanvas.toDataURL('image/png'));
+            setQrisPreviewError('');
+        } catch (error: any) {
+            setQrisPreviewUrl('');
+            setQrisPreviewError('Gagal membuat QRIS dinamis: ' + error.message);
+        }
+    }, [qrisStaticString]);
+
+    // Effect to generate QR when QRIS is selected in payment modal
+    useEffect(() => {
+        if (selectedPaymentMethod === 'QRIS' && paymentTransaction && isPaymentModalOpen) {
+            generateQrisQrCode(paymentTransaction.total_amount);
+        } else {
+            setQrisPreviewUrl('');
+            setQrisPreviewError('');
+        }
+    }, [selectedPaymentMethod, paymentTransaction, isPaymentModalOpen, generateQrisQrCode]);
 
     useEffect(() => {
         fetchTransactions();
@@ -1173,6 +1273,44 @@ const TransactionHistory: React.FC = () => {
                                         {selectedPaymentMethod === 'TRANSFER' && <CheckCircle className="w-5 h-5 text-brewasa-copper" />}
                                     </button>
                                 </div>
+
+                                {/* QRIS QR Code Preview */}
+                                {selectedPaymentMethod === 'QRIS' && (
+                                    <div className="mt-4">
+                                        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-50 via-white to-amber-50 border border-emerald-100 shadow-lg p-4">
+                                            <div className="absolute inset-0 pointer-events-none opacity-60 [background-image:radial-gradient(circle_at_top_right,rgba(16,185,129,0.14),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(245,158,11,0.10),transparent_28%)]" />
+                                            <div className="relative">
+                                                {paymentTransaction && (
+                                                    <p className="text-center text-sm font-bold text-gray-700 mb-3">
+                                                        Rp {paymentTransaction.total_amount.toLocaleString('id-ID')}
+                                                    </p>
+                                                )}
+                                                <div className="rounded-2xl bg-white p-3 shadow-md border border-gray-100 mx-auto max-w-[280px]">
+                                                    {qrisPreviewUrl ? (
+                                                        <img
+                                                            src={qrisPreviewUrl}
+                                                            alt="QRIS dinamis"
+                                                            className="w-full aspect-square object-contain select-none"
+                                                            draggable={false}
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full aspect-square rounded-xl bg-gray-50 flex items-center justify-center">
+                                                            <div className="flex flex-col items-center gap-3 text-gray-400 p-4 text-center">
+                                                                <QrCode className="w-12 h-12" />
+                                                                {qrisPreviewError ? (
+                                                                    <p className="text-xs text-red-500 font-medium">{qrisPreviewError}</p>
+                                                                ) : (
+                                                                    <div className="h-1.5 w-20 rounded-full bg-gray-200 animate-pulse" />
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <p className="text-center text-[11px] text-gray-400 mt-2">Scan QR untuk membayar</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <button
                                     onClick={completePayment}

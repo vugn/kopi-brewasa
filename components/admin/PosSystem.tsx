@@ -391,16 +391,6 @@ const PosSystem: React.FC = () => {
             const { error: stockError } = await supabase.rpc('process_transaction_stock', { transaction_uuid: trans.id });
             if (stockError) console.error("Stock deduction failed:", stockError); // Don't block UI, just log
 
-            // Automatic Receipt Printing
-            try {
-                bluetoothPrinter.printReceipt(trans, itemsPayload).catch(err => {
-                    console.error("Auto print failed:", err);
-                    alert("Transaksi berhasil, tapi gagal print struk: " + err.message);
-                });
-            } catch (e) {
-                console.error("Print invocation failed", e);
-            }
-
             alert('Transaksi Berhasil!');
             setCart([]);
             setShowPaymentModal(false);
@@ -420,26 +410,28 @@ const PosSystem: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] gap-6 relative">
+        <div className="flex flex-col lg:flex-row h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] gap-3 md:gap-6 relative">
             {/* Left Panel: Menu Grid */}
-            <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden pb-20 lg:pb-0">
-                {/* Header */}
-                <div className="p-4 border-b flex gap-4 sticky top-0 bg-white z-10 items-center">
+            <div className="flex-1 flex flex-col bg-white lg:rounded-2xl shadow-sm lg:border lg:border-gray-100 overflow-hidden pb-24 sm:pb-20 lg:pb-0">
+                {/* Header - Sticky */}
+                <div className="p-3 sm:p-4 border-b flex flex-col sm:flex-row gap-2 sm:gap-3 sticky top-0 bg-white z-10">
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                         <input
                             type="text"
                             placeholder="Cari menu..."
-                            className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-brewasa-copper/20"
+                            className="w-full pl-9 pr-3 py-2 sm:py-2.5 text-sm bg-gray-50 border-none rounded-lg sm:rounded-xl focus:ring-2 focus:ring-brewasa-copper/20"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                         />
                     </div>
-                    <PrinterConnection />
+                    <div className="hidden sm:block">
+                        <PrinterConnection />
+                    </div>
                 </div>
 
-                {/* Category Tabs */}
-                <div className="px-4 pb-2 flex gap-2 overflow-x-auto no-scrollbar">
+                {/* Category Tabs - Sticky */}
+                <div className="px-3 sm:px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar sticky top-[56px] sm:top-[68px] bg-white/95 backdrop-blur-sm z-9 border-b">
                     {[
                         { id: 'ALL', label: 'Semua' },
                         { id: 'MAIN', label: 'Utama' },
@@ -460,29 +452,26 @@ const PosSystem: React.FC = () => {
                 </div>
 
                 {/* Grid */}
-                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 custom-scrollbar">
                     {loading ? (
-                        <div className="text-center p-10">Loading menu...</div>
+                        <div className="text-center p-10 text-gray-500">Loading menu...</div>
                     ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
                             {filteredMenu.map(item => (
                                 <button
                                     key={item.id}
                                     onClick={() => addToCart(item)}
-                                    className="text-left bg-white border hover:border-brewasa-copper rounded-xl p-2 md:p-3 transition-all hover:shadow-md group flex flex-col h-full active:scale-95"
+                                    className="text-left bg-white border border-gray-200 hover:border-brewasa-copper hover:shadow-md rounded-lg sm:rounded-xl p-1.5 sm:p-2 md:p-3 transition-all group flex flex-col h-full active:scale-95"
                                 >
-                                    <div className="bg-gray-100 rounded-lg h-28 md:h-32 w-full mb-2 md:mb-3 overflow-hidden relative">
-                                        <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                        {/* Add Button Overlay hint */}
-                                        <div className="absolute bottom-2 right-2 bg-white/90 rounded-full p-1 shadow opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Plus className="w-4 h-4 text-brewasa-copper" />
-                                        </div>
+                                    <div className="bg-gray-100 rounded h-16 sm:h-20 md:h-24 lg:h-28 w-full mb-1.5 sm:mb-2 md:mb-3 overflow-hidden relative">
+                                        <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200" />
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
                                     </div>
-                                    <h3 className="font-bold text-gray-800 text-sm md:text-base line-clamp-1">{item.name}</h3>
+                                    <h3 className="font-bold text-gray-800 text-xs sm:text-sm line-clamp-2">{item.name}</h3>
                                     <div className="flex items-center gap-1 mt-auto">
-                                        <p className="text-brewasa-copper font-medium text-sm md:text-base">{item.price}</p>
+                                        <p className="text-brewasa-copper font-semibold text-xs sm:text-sm">{item.price}</p>
                                         {item.is_consignment && (
-                                            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-bold border border-amber-200">TITIPAN</span>
+                                            <span className="text-[8px] sm:text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-bold border border-amber-200">TITIPAN</span>
                                         )}
                                     </div>
                                 </button>
@@ -492,66 +481,72 @@ const PosSystem: React.FC = () => {
                 </div>
             </div>
 
-            {/* Mobile Sticky Bottom Bar (Visible only on Local/Tablet when cart not empty) */}
+            {/* Mobile Sticky Bottom Bar */}
             {cart.length > 0 && (
-                <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t p-4 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex items-center justify-between pb-8 md:pb-4">
-                    <div onClick={() => setIsCartOpen(true)} className="flex flex-col">
-                        <span className="text-xs text-gray-500">{totalItems} Item</span>
-                        <span className="font-bold text-lg text-brewasa-dark">Rp {formatNumber(totalAmount)}</span>
-                    </div>
+                <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 sm:p-4 z-40 shadow-[0_-2px_10px_-3px_rgba(0,0,0,0.15)] flex items-center justify-between gap-3">
+                    <button onClick={() => setIsCartOpen(true)} className="flex flex-col flex-1 cursor-pointer">
+                        <span className="text-xs text-gray-500 font-medium">{totalItems} Item</span>
+                        <span className="font-bold text-base sm:text-lg text-brewasa-dark">Rp {formatNumber(totalAmount)}</span>
+                    </button>
                     <button
                         onClick={() => setIsCartOpen(true)}
-                        className="px-6 py-2 bg-brewasa-dark text-white rounded-lg font-bold flex items-center gap-2"
+                        className="px-4 sm:px-6 py-2.5 sm:py-3 bg-brewasa-dark text-white rounded-lg sm:rounded-xl font-bold text-sm sm:text-base flex items-center gap-2 whitespace-nowrap hover:bg-brewasa-copper transition-colors"
                     >
-                        <ChevronUp className="w-4 h-4" /> Lihat & Bayar
+                        <span>Bayar</span>
+                        <ChevronUp className="w-4 h-4" />
                     </button>
                 </div>
             )}
 
-            {/* Right Panel: Cart (Desktop: Standard Side Panel, Mobile: Bottom Sheet/Modal) */}
+            {/* Right Panel: Cart (Desktop: Standard Side Panel, Mobile: Bottom Sheet) */}
             <div className={`
           fixed inset-0 z-50 lg:static lg:z-0
           lg:w-96 bg-white lg:rounded-2xl lg:shadow-sm lg:border lg:border-gray-100 flex flex-col
-          transition-transform duration-300 ease-in-out
-          ${isCartOpen ? 'translate-y-0' : 'translate-y-full lg:translate-y-0'}
+          transition-all duration-300 ease-out
+          ${isCartOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none lg:translate-y-0 lg:opacity-100 lg:pointer-events-auto'}
       `}>
-                {/* Mobile Header for Cart Drawer */}
-                <div className="p-4 border-b bg-gray-50/50 flex justify-between items-center lg:hidden">
-                    <h2 className="font-bold text-lg flex items-center gap-2">Detail Pesanan</h2>
-                    <button onClick={() => setIsCartOpen(false)} className="p-2"><ChevronDown /></button>
-                </div>
-
-                {/* Desktop Header */}
-                <div className="p-4 border-b bg-gray-50/50 hidden lg:block">
-                    <h2 className="font-bold text-lg flex items-center gap-2">
-                        <ShoppingCart className="w-5 h-5" /> Current Order
+                {/* Header */}
+                <div className="px-4 sm:px-5 py-3 sm:py-4 border-b bg-gray-50/80 flex justify-between items-center flex-shrink-0">
+                    <h2 className="font-bold text-base sm:text-lg flex items-center gap-2 text-gray-900">
+                        <ShoppingCart className="w-5 h-5" /> Pesanan ({totalItems})
                     </h2>
+                    <button onClick={() => setIsCartOpen(false)} className="p-2 lg:hidden hover:bg-gray-200 rounded-full transition-colors">
+                        <ChevronDown className="w-5 h-5" />
+                    </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32 lg:pb-4">
+                {/* Items */}
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 sm:space-y-3 custom-scrollbar">
                     {cart.length === 0 ? (
-                        <div className="text-center text-gray-400 py-10">Keranjang kosong</div>
+                        <div className="text-center text-gray-400 py-12 text-sm">Keranjang kosong</div>
                     ) : (
                         cart.map(item => (
-                            <div key={item.id} className="flex gap-3 items-center border-b pb-3 last:border-0">
-                                <div className="flex-1">
-                                    <h4 className="font-medium text-gray-800">{item.name}</h4>
-                                    <p className="text-sm text-gray-500">{item.price}</p>
+                            <div key={item.id} className="flex gap-3 items-center bg-gray-50 p-3 sm:p-3.5 rounded-lg hover:bg-gray-100 transition-colors">
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="font-semibold text-gray-800 text-sm line-clamp-1">{item.name}</h4>
+                                    <p className="text-xs sm:text-sm text-brewasa-copper font-medium">{item.price}</p>
                                 </div>
-                                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-                                    <button onClick={() => updateQty(item.id, -1)} className="p-2 lg:p-1 hover:bg-white rounded-md transition-colors"><Minus className="w-4 h-4" /></button>
-                                    <span className="font-mono w-8 text-center text-sm font-bold">{item.quantity}</span>
-                                    <button onClick={() => updateQty(item.id, 1)} className="p-2 lg:p-1 hover:bg-white rounded-md transition-colors"><Plus className="w-4 h-4" /></button>
+                                <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg">
+                                    <button onClick={() => updateQty(item.id, -1)} className="p-1.5 hover:bg-gray-100 transition-colors" title="Kurangi">
+                                        <Minus className="w-4 h-4 text-gray-600" />
+                                    </button>
+                                    <span className="font-mono w-6 text-center text-sm font-bold text-gray-800">{item.quantity}</span>
+                                    <button onClick={() => updateQty(item.id, 1)} className="p-1.5 hover:bg-gray-100 transition-colors" title="Tambah">
+                                        <Plus className="w-4 h-4 text-brewasa-copper" />
+                                    </button>
                                 </div>
                             </div>
                         ))
                     )}
                 </div>
 
-                <div className="p-4 border-t bg-gray-50 lg:relative fixed bottom-0 left-0 right-0 w-full mb-0 pb-8 lg:pb-4">
-                    <div className="flex justify-between items-center mb-4">
-                        <span className="text-gray-600">Total</span>
-                        <span className="text-2xl font-bold text-brewasa-dark">Rp {formatNumber(totalAmount)}</span>
+                {/* Footer */}
+                <div className="p-3 sm:p-4 border-t bg-gray-50/80 space-y-3 flex-shrink-0">
+                    <div className="bg-white rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between items-center text-xs sm:text-sm text-gray-600">
+                            <span>Total</span>
+                            <span className="text-lg sm:text-xl font-bold text-brewasa-dark">Rp {formatNumber(totalAmount)}</span>
+                        </div>
                     </div>
                     <div className="flex gap-2">
                         <button
@@ -560,7 +555,7 @@ const PosSystem: React.FC = () => {
                                 fetchPendingBills();
                                 setShowAddToBillModal(true);
                             }}
-                            className="px-4 py-4 bg-yellow-100 text-yellow-700 rounded-xl font-bold hover:bg-yellow-200 transition-colors flex items-center justify-center"
+                            className="flex items-center justify-center p-2.5 sm:p-3 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg hover:bg-yellow-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Tambah ke Open Bill"
                         >
                             <Plus className="w-5 h-5" />
@@ -568,7 +563,7 @@ const PosSystem: React.FC = () => {
                         <button
                             disabled={cart.length === 0}
                             onClick={() => setShowPaymentModal(true)}
-                            className="flex-1 py-4 bg-brewasa-dark text-white rounded-xl font-bold hover:bg-brewasa-copper transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-lg"
+                            className="flex-1 py-2.5 sm:py-3 bg-brewasa-dark text-white rounded-lg font-bold text-sm sm:text-base hover:bg-brewasa-copper transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
                         >
                             Bayar Sekarang
                         </button>
@@ -578,18 +573,18 @@ const PosSystem: React.FC = () => {
 
             {/* Payment Modal */}
             {showPaymentModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4">
-                    <div className="bg-white rounded-3xl w-full max-w-4xl xl:max-w-5xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden">
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 sm:p-4">
+                    <div className="bg-white w-full lg:w-full lg:max-w-3xl h-[92vh] lg:max-h-[90vh] lg:rounded-3xl flex flex-col shadow-2xl overflow-hidden rounded-t-3xl lg:rounded-b-3xl">
                         {/* Header - Pinned */}
-                        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b flex justify-between items-center bg-gray-50 flex-shrink-0">
-                            <h3 className="font-bold text-lg sm:text-xl">Pembayaran</h3>
+                        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-gray-50 to-gray-50 flex-shrink-0">
+                            <h3 className="font-bold text-lg sm:text-xl text-gray-900">Pembayaran</h3>
                             <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
                         {/* Scrollable Body */}
-                        <div className="px-4 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                        <div className="px-3 sm:px-6 py-3 sm:py-5 space-y-4 sm:space-y-5 flex-1 overflow-y-auto custom-scrollbar">
                             {/* Customer Name */}
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">Nama Customer</label>

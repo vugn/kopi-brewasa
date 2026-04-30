@@ -317,10 +317,7 @@ class BluetoothPrinterService {
 
   async printReceipt(transaction: any, items: any[]) {
     if (!this.isConnected()) {
-      const success = await this.connect();
-      if (!success) {
-        throw new Error("Printer not connected");
-      }
+      throw new Error("Printer belum terkoneksi. Sambungkan printer terlebih dahulu melalui tombol di halaman POS.");
     }
 
     const cmds: Uint8Array[] = [];
