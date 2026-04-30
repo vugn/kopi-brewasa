@@ -160,20 +160,63 @@ const PosSystem: React.FC = () => {
         }
 
         const dynamicQris = convertQRIS(staticQris, { amount: finalTotal });
+        const qrCanvas = document.createElement('canvas');
+        const qrSize = 960;
 
-        QRCode.toDataURL(dynamicQris, {
-            width: 280,
-            margin: 2,
-            errorCorrectionLevel: 'M',
+        QRCode.toCanvas(qrCanvas, dynamicQris, {
+            width: qrSize,
+            margin: 3,
+            errorCorrectionLevel: 'H',
             color: {
                 dark: '#111111',
                 light: '#FFFFFF'
             }
         })
-            .then((dataUrl: string) => {
-                if (!cancelled) {
-                    setQrisPreviewUrl(dataUrl);
-                    setQrisPreviewError('');
+            .then(async () => {
+                try {
+                    const logo = new Image();
+                    logo.src = '/logo-icon.png';
+
+                    await new Promise<void>((resolve, reject) => {
+                        logo.onload = () => resolve();
+                        logo.onerror = () => reject(new Error('Logo tidak bisa dimuat'));
+                    });
+
+                    const context = qrCanvas.getContext('2d');
+                    if (!context) throw new Error('Canvas context tidak tersedia');
+
+                    const logoSize = qrSize * 0.18;
+                    const logoX = (qrSize - logoSize) / 2;
+                    const logoY = (qrSize - logoSize) / 2;
+                    const radius = qrSize * 0.03;
+
+                    context.save();
+                    context.fillStyle = '#FFFFFF';
+                    context.beginPath();
+                    context.moveTo(logoX + radius, logoY);
+                    context.lineTo(logoX + logoSize - radius, logoY);
+                    context.quadraticCurveTo(logoX + logoSize, logoY, logoX + logoSize, logoY + radius);
+                    context.lineTo(logoX + logoSize, logoY + logoSize - radius);
+                    context.quadraticCurveTo(logoX + logoSize, logoY + logoSize, logoX + logoSize - radius, logoY + logoSize);
+                    context.lineTo(logoX + radius, logoY + logoSize);
+                    context.quadraticCurveTo(logoX, logoY + logoSize, logoX, logoY + logoSize - radius);
+                    context.lineTo(logoX, logoY + radius);
+                    context.quadraticCurveTo(logoX, logoY, logoX + radius, logoY);
+                    context.closePath();
+                    context.fill();
+
+                    context.drawImage(logo, logoX + logoSize * 0.12, logoY + logoSize * 0.12, logoSize * 0.76, logoSize * 0.76);
+                    context.restore();
+
+                    if (!cancelled) {
+                        setQrisPreviewUrl(qrCanvas.toDataURL('image/png'));
+                        setQrisPreviewError('');
+                    }
+                } catch {
+                    if (!cancelled) {
+                        setQrisPreviewUrl(qrCanvas.toDataURL('image/png'));
+                        setQrisPreviewError('');
+                    }
                 }
             })
             .catch((error: Error) => {
@@ -614,7 +657,7 @@ const PosSystem: React.FC = () => {
                                         <div className="absolute inset-0 pointer-events-none opacity-60 [background-image:radial-gradient(circle_at_top_right,rgba(16,185,129,0.14),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(245,158,11,0.10),transparent_28%)]" />
 
                                         <div className="relative flex items-center justify-center">
-                                            <div className="rounded-3xl bg-white p-3 sm:p-4 md:p-5 shadow-lg border border-gray-100 w-full max-w-[92vw] sm:max-w-[30rem] md:max-w-[36rem] lg:max-w-[40rem]">
+                                            <div className="rounded-3xl bg-white p-3 sm:p-4 md:p-5 shadow-lg border border-gray-100 w-full max-w-[94vw] sm:max-w-[34rem] md:max-w-[40rem] lg:max-w-[44rem]">
                                                 {qrisPreviewUrl ? (
                                                     <img
                                                         src={qrisPreviewUrl}
