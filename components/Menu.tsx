@@ -25,9 +25,9 @@ const Menu: React.FC = () => {
         // Our Type uses: id, name, description, price, image, tags, forWhat
         const formattedData = data.map((item: any) => ({
           ...item,
-          forWhat: item.for_what, // Transform snake to camel
+          forWhat: item.for_what,
           isAvailable: item.is_available
-        })).filter((item: any) => item.isAvailable !== false);
+        })).filter((item: any) => item.isAvailable !== false && item.category !== 'ADDON');
         setMenuItems(formattedData);
       }
       setLoading(false);
