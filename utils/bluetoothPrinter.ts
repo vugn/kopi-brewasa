@@ -358,9 +358,9 @@ class BluetoothPrinterService {
     push("brewasa.com" + NL);
     push(divider);
     pushCmd(COMMANDS.ALIGN_CENTER);
-    push("Jl. Jalur I No.5, Surgi Mufti," + NL);
-    push("Banjarmasin Utara," + NL);
-    push("Kota Banjarmasin, Kalsel 70122" + NL);
+    push("Jl. Gatot Subroto V No.69," + NL);
+    push("Kebun Bunga, Banjarmasin Tim.," + NL);
+    push("Kota Banjarmasin, Kalsel 70237" + NL);
     push(divider);
 
     // Meta

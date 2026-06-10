@@ -24,9 +24,9 @@ const Location: React.FC = () => {
                             <div>
                                 <h4 className="font-bold text-lg mb-2">Kopi Brewasa</h4>
                                 <p className="text-brewasa-dark/80 leading-relaxed">
-                                    Jl. Jalur I No.5, Surgi Mufti, <br />
-                                    Kec. Banjarmasin Utara, Kota Banjarmasin, <br />
-                                    Kalimantan Selatan 70122
+                                    Jl. Gatot Subroto V No.69, Kebun Bunga, <br />
+                                    Kec. Banjarmasin Tim., Kota Banjarmasin, <br />
+                                    Kalimantan Selatan 70237
                                 </p>
                             </div>
                         </div>
