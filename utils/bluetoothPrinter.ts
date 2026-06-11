@@ -401,8 +401,8 @@ class BluetoothPrinterService {
 
     pushCmd(COMMANDS.ALIGN_CENTER);
     pushCmd(COMMANDS.BOLD_ON);
-    push("WIFI: Rumah BUMN Banjarmasin" + NL);
-    push("PASS: CeoCfo2025@" + NL);
+    push("WIFI: RB Banjarmasin" + NL);
+    push("PASS: RBBJM123#" + NL);
     pushCmd(COMMANDS.BOLD_OFF);
     push(divider);
 

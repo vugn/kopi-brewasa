@@ -4,6 +4,7 @@ import { CartProvider } from './context/CartContext';
 import Home from './pages/Home';
 import Admin from './pages/Admin';
 import Maintenance from './pages/Maintenance';
+import WifiQr from './pages/WifiQr';
 
 function App() {
   const isMaintenance = import.meta.env.VITE_MAINTENANCE_MODE === 'true';
@@ -15,6 +16,7 @@ function App() {
           <Routes>
             <Route path="/" element={isMaintenance ? <Maintenance /> : <Home />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/wifi-qr" element={<WifiQr />} />
           </Routes>
         </BrowserRouter>
       </CartProvider>
