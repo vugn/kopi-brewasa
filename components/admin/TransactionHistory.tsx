@@ -41,6 +41,16 @@ interface MenuItem {
     price: string;
 }
 
+// Helper untuk jam operasional: Transaksi sebelum jam buka masuk ke hari sebelumnya
+const getBusinessDate = (dateParam: string | Date, openHour: number) => {
+    const d = new Date(dateParam);
+    if (d.getHours() < openHour) {
+        d.setDate(d.getDate() - 1);
+    }
+    d.setHours(0, 0, 0, 0); // Normalize to midnight
+    return d;
+};
+
 const TransactionHistory: React.FC = () => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
@@ -78,6 +88,20 @@ const TransactionHistory: React.FC = () => {
     );
     const [qrisPreviewUrl, setQrisPreviewUrl] = useState('');
     const [qrisPreviewError, setQrisPreviewError] = useState('');
+
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(20);
+
+    // Business Hours State
+    const [openingHour, setOpeningHour] = useState(() => {
+        const saved = localStorage.getItem('kopi-brewasa.openingHour');
+        return saved ? parseInt(saved, 10) : 16; // default 16:00
+    });
+
+    useEffect(() => {
+        localStorage.setItem('kopi-brewasa.openingHour', openingHour.toString());
+    }, [openingHour]);
 
     // Generate QRIS QR code when payment method is QRIS and modal is open
     const generateQrisQrCode = useCallback(async (amount: number) => {
@@ -169,6 +193,10 @@ const TransactionHistory: React.FC = () => {
     }, [selectedPaymentMethod, paymentTransaction, isPaymentModalOpen, generateQrisQrCode]);
 
     useEffect(() => {
+        setCurrentPage(1);
+    }, [filterStatus, filterPayment, filterVoucher, filterConsignment, filterDate]);
+
+    useEffect(() => {
         fetchTransactions();
         fetchMenuItems();
     }, []);
@@ -208,17 +236,16 @@ const TransactionHistory: React.FC = () => {
             // @ts-ignore
             const trans: Transaction[] = data || [];
             setTransactions(trans);
-            calculateStats(trans);
         }
         setLoading(false);
     };
 
-    const calculateStats = (data: Transaction[]) => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday as start
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const calculateStats = useCallback((data: Transaction[], openHour: number) => {
+        const currentBusinessDay = getBusinessDate(new Date(), openHour);
+        
+        const startOfWeek = new Date(currentBusinessDay);
+        startOfWeek.setDate(currentBusinessDay.getDate() - currentBusinessDay.getDay()); // Sunday as start
+        const startOfMonth = new Date(currentBusinessDay.getFullYear(), currentBusinessDay.getMonth(), 1);
 
         let daily = 0;
         let weekly = 0;
@@ -238,7 +265,7 @@ const TransactionHistory: React.FC = () => {
             // Only count completed transactions for stats
             if (t.status !== 'COMPLETED') return;
 
-            const tDate = new Date(t.created_at);
+            const tDate = getBusinessDate(t.created_at, openHour);
             const items = t.transaction_items || t.items || [];
 
             // Calculate cups for this transaction
@@ -257,7 +284,7 @@ const TransactionHistory: React.FC = () => {
             });
 
             // Daily
-            if (tDate >= today) {
+            if (tDate.getTime() === currentBusinessDay.getTime()) {
                 daily += t.total_amount;
                 dailyCups += cupsInTransaction;
                 dailyConsignment += consignmentRevenue;
@@ -290,7 +317,11 @@ const TransactionHistory: React.FC = () => {
             dailyConsignment, weeklyConsignment, monthlyConsignment,
             dailyConsignmentProfit, weeklyConsignmentProfit, monthlyConsignmentProfit
         });
-    };
+    }, []);
+
+    useEffect(() => {
+        calculateStats(transactions, openingHour);
+    }, [transactions, openingHour, calculateStats]);
 
     const updateStatus = async (id: string, newStatus: string) => {
         // Optimistic update
@@ -318,9 +349,6 @@ const TransactionHistory: React.FC = () => {
                 t.id === id ? { ...t, status: updatedTransaction.status } : t
             ));
 
-            // Recalculate stats based on the verified new state
-            calculateStats(transactions.map(t => t.id === id ? { ...t, status: newStatus } : t));
-
         } catch (err: any) {
             console.error('Failed to update status:', err);
             alert('Gagal update status: ' + err.message);
@@ -341,7 +369,6 @@ const TransactionHistory: React.FC = () => {
         } else {
             const updated = transactions.filter(t => t.id !== id);
             setTransactions(updated);
-            calculateStats(updated);
             alert('Transaksi berhasil dihapus dan stok dikembalikan.');
         }
     };
@@ -556,22 +583,22 @@ const TransactionHistory: React.FC = () => {
         let matchesDate = true;
         if (filterDate.start) {
             const start = new Date(filterDate.start);
-            const tDate = new Date(t.created_at);
             start.setHours(0, 0, 0, 0);
-            const tDateOnly = new Date(tDate);
-            tDateOnly.setHours(0, 0, 0, 0);
-            matchesDate = matchesDate && tDateOnly >= start;
+            const tBusinessDate = getBusinessDate(t.created_at, openingHour);
+            matchesDate = matchesDate && tBusinessDate >= start;
         }
         if (filterDate.end) {
             const end = new Date(filterDate.end);
-            const tDate = new Date(t.created_at);
-            end.setHours(23, 59, 59, 999);
-            const tDateOnly = new Date(tDate);
-            matchesDate = matchesDate && tDate <= end;
+            end.setHours(0, 0, 0, 0);
+            const tBusinessDate = getBusinessDate(t.created_at, openingHour);
+            matchesDate = matchesDate && tBusinessDate <= end;
         }
 
         return matchesStatus && matchesDate && matchesPayment && matchesVoucher && matchesConsignment;
     });
+
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return (
         <div className="space-y-6">
@@ -684,7 +711,23 @@ const TransactionHistory: React.FC = () => {
                         </div>
 
                         {/* Date Filter */}
-                        <div className="flex gap-2 items-center">
+                        <div className="flex gap-2 items-center flex-wrap">
+                            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2" title="Set Jam Buka Toko">
+                                <span className="text-xs text-gray-500 font-bold whitespace-nowrap">Jam Buka:</span>
+                                <input 
+                                    type="number" 
+                                    min="0" max="23"
+                                    value={openingHour}
+                                    onChange={e => {
+                                        const val = parseInt(e.target.value, 10);
+                                        if (!isNaN(val) && val >= 0 && val <= 23) {
+                                            setOpeningHour(val);
+                                        }
+                                    }}
+                                    className="w-10 py-1.5 text-sm font-bold text-brewasa-dark focus:outline-none text-center bg-transparent"
+                                />
+                                <span className="text-xs text-gray-500 font-bold">:00</span>
+                            </div>
                             <input
                                 type="date"
                                 className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none w-[130px]"
@@ -868,7 +911,7 @@ const TransactionHistory: React.FC = () => {
                                     {filtered.length === 0 && (
                                         <tr><td colSpan={7} className="p-8 text-center text-gray-400">Tidak ada data transaksi.</td></tr>
                                     )}
-                                    {filtered.map(t => (
+                                    {paginatedData.map(t => (
                                         <React.Fragment key={t.id}>
                                             <tr className="hover:bg-gray-50/50 transition-colors">
                                                 <td className="p-3">
@@ -981,7 +1024,7 @@ const TransactionHistory: React.FC = () => {
                             {filtered.length === 0 && (
                                 <div className="p-8 text-center text-gray-400">Tidak ada data transaksi.</div>
                             )}
-                            {filtered.map(t => (
+                            {paginatedData.map(t => (
                                 <div key={t.id} className="p-4 space-y-3">
                                     {/* Header: Date + Status */}
                                     <div className="flex items-center justify-between">
@@ -1099,6 +1142,48 @@ const TransactionHistory: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+
+                        {/* Pagination Controls */}
+                        {filtered.length > 0 && (
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 p-4 border-t border-gray-100 bg-gray-50/50">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm text-gray-500">
+                                        Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filtered.length)} dari {filtered.length} transaksi
+                                    </span>
+                                    <select
+                                        value={itemsPerPage}
+                                        onChange={e => {
+                                            setItemsPerPage(Number(e.target.value));
+                                            setCurrentPage(1);
+                                        }}
+                                        className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-brewasa-copper/20 outline-none"
+                                    >
+                                        <option value={20}>20 / halaman</option>
+                                        <option value={50}>50 / halaman</option>
+                                        <option value={100}>100 / halaman</option>
+                                    </select>
+                                </div>
+                                <div className="flex gap-1 items-center">
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={currentPage === 1}
+                                        className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white transition-colors"
+                                    >
+                                        Sebelumnya
+                                    </button>
+                                    <span className="px-3 py-1 text-sm font-medium text-gray-600">
+                                        Hal {currentPage} dari {totalPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={currentPage === totalPages}
+                                        className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white transition-colors"
+                                    >
+                                        Selanjutnya
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>
