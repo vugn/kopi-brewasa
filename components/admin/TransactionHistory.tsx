@@ -41,6 +41,12 @@ interface MenuItem {
     price: string;
 }
 
+const parsePrice = (priceStr: string | number) => {
+    if (typeof priceStr === 'number') return priceStr;
+    if (!priceStr) return 0;
+    return parseInt(String(priceStr).toLowerCase().replace('k', '000').replace(/[^0-9]/g, '')) || 0;
+};
+
 // Helper untuk jam operasional: Transaksi sebelum jam buka masuk ke hari sebelumnya
 const getBusinessDate = (dateParam: string | Date, openHour: number) => {
     const d = new Date(dateParam);
@@ -357,6 +363,27 @@ const TransactionHistory: React.FC = () => {
         }
     };
 
+    const updatePaymentMethod = async (id: string, newMethod: string) => {
+        // Optimistic update
+        const originalTransactions = [...transactions];
+        setTransactions(transactions.map(t =>
+            t.id === id ? { ...t, payment_method: newMethod } : t
+        ));
+
+        try {
+            const { error } = await supabase
+                .from('transactions')
+                .update({ payment_method: newMethod })
+                .eq('id', id);
+
+            if (error) throw error;
+        } catch (err: any) {
+            console.error('Failed to update payment method:', err);
+            alert('Gagal update metode pembayaran: ' + err.message);
+            setTransactions(originalTransactions);
+        }
+    };
+
     const deleteTransaction = async (id: string) => {
         if (!window.confirm('Apakah Anda yakin ingin menghapus transaksi ini? Tindakan ini tidak dapat dibatalkan.')) return;
 
@@ -401,24 +428,31 @@ const TransactionHistory: React.FC = () => {
 
     const handleAddItem = () => {
         if (!newItemId) return;
-        const menu = menuItems.find(m => m.id === newItemId);
+        const menu = menuItems.find(m => String(m.id) === String(newItemId));
         if (!menu) return;
 
-        const existing = editItems.find(i => i.menu_item_id === newItemId); // Need menu_item_id in queries
-        // Ideally we should have menu_item_id in the fetched items. 
-        // Let's assume for now we might add a new line or increment. 
-        // Since we don't have menu_item_id in the interface from previous fetch, we might fallback to name matching or just add new line.
-        // Better: Fetch menu_item_id in fetchTransactions.
+        const qty = Number(newItemQty) || 1;
+        const price = parsePrice(menu.price);
 
-        const price = parseInt(menu.price);
-        const newItem: TransactionItem = {
-            item_name: menu.name,
-            quantity: newItemQty,
-            price: price,
-            menu_item_id: menu.id
-        };
+        const existingIndex = editItems.findIndex(i => String(i.menu_item_id) === String(newItemId));
+        
+        if (existingIndex >= 0) {
+            const updated = [...editItems];
+            updated[existingIndex] = {
+                ...updated[existingIndex],
+                quantity: updated[existingIndex].quantity + qty
+            };
+            setEditItems(updated);
+        } else {
+            const newItem: TransactionItem = {
+                item_name: menu.name,
+                quantity: qty,
+                price: price,
+                menu_item_id: String(menu.id)
+            };
+            setEditItems([...editItems, newItem]);
+        }
 
-        setEditItems([...editItems, newItem]);
         setNewItemId('');
         setNewItemQty(1);
     };
@@ -475,7 +509,7 @@ const TransactionHistory: React.FC = () => {
 
             const itemsPayload = editItems.map(item => ({
                 transaction_id: editingTransaction.id,
-                menu_item_id: item.menu_item_id, // This must be present!
+                menu_item_id: item.menu_item_id || null, // Allow null if legacy item
                 item_name: item.item_name,
                 quantity: item.quantity,
                 price: item.price,
@@ -483,13 +517,7 @@ const TransactionHistory: React.FC = () => {
                 consignment_cost: item.is_consignment ? (item.consignment_cost || 0) : 0
             }));
 
-            // Filter out items without menu_item_id (legacy or error?)
-            const validItems = itemsPayload.filter(i => i.menu_item_id);
-            if (validItems.length !== itemsPayload.length) {
-                alert("Warning: Beberapa item tidak memiliki ID valid dan tidak disimpan.");
-            }
-
-            const { error: insertError } = await supabase.from('transaction_items').insert(validItems);
+            const { error: insertError } = await supabase.from('transaction_items').insert(itemsPayload);
             if (insertError) throw insertError;
 
             alert('Perubahan berhasil disimpan!');
@@ -961,13 +989,20 @@ const TransactionHistory: React.FC = () => {
                                                     )}
                                                 </td>
                                                 <td className="p-3 text-center">
-                                                    <span className={`px-2 py-1 rounded text-[11px] font-bold border ${t.payment_method === 'OPEN_BILL' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                                        {t.payment_method === 'OPEN_BILL' ? 'OPEN BILL' : t.payment_method}
-                                                    </span>
+                                                    <select
+                                                        value={t.payment_method}
+                                                        onChange={(e) => updatePaymentMethod(t.id, e.target.value)}
+                                                        className={`text-[10px] font-bold border rounded px-1 py-0.5 outline-none block mx-auto cursor-pointer hover:border-brewasa-copper ${t.payment_method === 'OPEN_BILL' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-white text-gray-700 border-gray-200'}`}
+                                                    >
+                                                        <option value="CASH">CASH</option>
+                                                        <option value="QRIS">QRIS</option>
+                                                        <option value="TRANSFER">TRANSFER</option>
+                                                        <option value="OPEN_BILL">OPEN BILL</option>
+                                                    </select>
                                                     {t.payment_method === 'OPEN_BILL' && t.status !== 'COMPLETED' && (
                                                         <button
                                                             onClick={() => openPaymentModal(t)}
-                                                            className="ml-1 p-0.5 text-brewasa-copper hover:bg-orange-50 rounded-full animate-pulse"
+                                                            className="mt-1 p-0.5 text-brewasa-copper hover:bg-orange-50 rounded-full animate-pulse inline-block"
                                                             title="Selesaikan Pembayaran"
                                                         >
                                                             <DollarSign className="w-3 h-3" />
@@ -1057,9 +1092,6 @@ const TransactionHistory: React.FC = () => {
                                             <span className="text-[10px] px-1.5 py-0.5 rounded border bg-blue-50 text-blue-600 border-blue-100">
                                                 {t.order_type?.replace('_', ' ') || 'DINE IN'}
                                             </span>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${t.payment_method === 'OPEN_BILL' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                                {t.payment_method === 'OPEN_BILL' ? 'OPEN' : t.payment_method}
-                                            </span>
                                         </div>
                                     </div>
 
@@ -1100,16 +1132,28 @@ const TransactionHistory: React.FC = () => {
                                     </div>
 
                                     {/* Status Selector - full width */}
-                                    <select
-                                        value={t.status}
-                                        onChange={(e) => updateStatus(t.id, e.target.value)}
-                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold bg-white cursor-pointer outline-none focus:border-brewasa-copper transition-colors"
-                                    >
-                                        <option value="PENDING">⏳ PENDING</option>
-                                        <option value="PROCESSING">🔄 PROCESSING</option>
-                                        <option value="COMPLETED">✅ COMPLETED</option>
-                                        <option value="CANCELLED">❌ CANCELLED</option>
-                                    </select>
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={t.payment_method}
+                                            onChange={(e) => updatePaymentMethod(t.id, e.target.value)}
+                                            className="w-1/2 px-2 py-3 border-2 border-gray-200 rounded-xl text-xs font-bold bg-white cursor-pointer outline-none focus:border-brewasa-copper transition-colors"
+                                        >
+                                            <option value="CASH">💵 CASH</option>
+                                            <option value="QRIS">📱 QRIS</option>
+                                            <option value="TRANSFER">💳 TRANSFER</option>
+                                            <option value="OPEN_BILL">📝 OPEN BILL</option>
+                                        </select>
+                                        <select
+                                            value={t.status}
+                                            onChange={(e) => updateStatus(t.id, e.target.value)}
+                                            className="w-1/2 px-2 py-3 border-2 border-gray-200 rounded-xl text-xs font-bold bg-white cursor-pointer outline-none focus:border-brewasa-copper transition-colors"
+                                        >
+                                            <option value="PENDING">⏳ PENDING</option>
+                                            <option value="PROCESSING">🔄 PROCESSING</option>
+                                            <option value="COMPLETED">✅ COMPLETED</option>
+                                            <option value="CANCELLED">❌ CANCELLED</option>
+                                        </select>
+                                    </div>
 
                                     {/* Action Buttons - large, labeled */}
                                     <div className="grid grid-cols-3 gap-2">
@@ -1201,7 +1245,8 @@ const TransactionHistory: React.FC = () => {
 
                             <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
                                 {/* Current Items Table */}
-                                <table className="w-full text-sm mb-6">
+                                <div className="overflow-x-auto mb-6">
+                                    <table className="w-full text-sm min-w-[500px]">
                                     <thead className="bg-gray-50 text-gray-500">
                                         <tr>
                                             <th className="p-2 text-left">Item</th>
@@ -1277,19 +1322,20 @@ const TransactionHistory: React.FC = () => {
                                         )}
                                     </tfoot>
                                 </table>
+                                </div>
 
                                 {/* Add Item Form */}
                                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                                     <h4 className="font-bold text-sm mb-3 text-gray-700">Tambah Item Baru</h4>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-col sm:flex-row gap-2">
                                         <select
                                             value={newItemId}
                                             onChange={e => setNewItemId(e.target.value)}
-                                            className="flex-1 p-2 border rounded-lg text-sm bg-white"
+                                            className="w-full sm:flex-1 p-2 border rounded-lg text-sm bg-white"
                                         >
                                             <option value="">-- Pilih Menu --</option>
                                             {menuItems.map(m => (
-                                                <option key={m.id} value={m.id}>{m.name} - Rp {parseInt(m.price).toLocaleString('id-ID')}</option>
+                                                <option key={m.id} value={m.id}>{m.name} - Rp {parsePrice(m.price).toLocaleString('id-ID')}</option>
                                             ))}
                                         </select>
                                         <input
@@ -1297,14 +1343,14 @@ const TransactionHistory: React.FC = () => {
                                             min="1"
                                             value={newItemQty}
                                             onChange={e => setNewItemQty(parseInt(e.target.value))}
-                                            className="w-20 p-2 border rounded-lg text-sm bg-white text-center"
+                                            className="w-full sm:w-20 p-2 border rounded-lg text-sm bg-white text-center"
                                         />
                                         <button
                                             onClick={handleAddItem}
                                             disabled={!newItemId}
-                                            className="bg-brewasa-dark text-white px-4 py-2 rounded-lg font-bold hover:bg-brewasa-copper disabled:opacity-50"
+                                            className="w-full sm:w-auto bg-brewasa-dark text-white px-4 py-2 rounded-lg font-bold hover:bg-brewasa-copper disabled:opacity-50"
                                         >
-                                            <Plus className="w-5 h-5" />
+                                            <Plus className="w-5 h-5 mx-auto" />
                                         </button>
                                     </div>
                                 </div>

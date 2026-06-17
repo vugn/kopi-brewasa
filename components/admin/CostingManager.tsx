@@ -71,7 +71,10 @@ const CostingManager: React.FC = () => {
         // 1. Fetch Menu Items
         const { data: menuData } = await supabase.from('menu_items').select('*');
         if (!menuData) return;
-        setMenuItems(menuData);
+        
+        // Filter out ADDON category and HIDDEN items
+        const filteredMenuData = menuData.filter((item: any) => item.category !== 'ADDON' && item.is_available === true);
+        setMenuItems(filteredMenuData);
 
         // 2. Fetch Recipes & Ingredients to calculate HPP
         // This is a bit complex in one query, so we might need to do a join or separate fetches.
@@ -81,7 +84,7 @@ const CostingManager: React.FC = () => {
         if (recipeData) {
             const newHppMap: Record<string, number> = {};
 
-            menuData.forEach((menu: any) => {
+            filteredMenuData.forEach((menu: any) => {
                 const menuRecipes = recipeData.filter((r: any) => r.menu_item_id == menu.id);
                 let totalCost = 0;
                 menuRecipes.forEach((r: any) => {
@@ -291,8 +294,8 @@ const CostingManager: React.FC = () => {
                     </div>
 
                     {/* Product Analysis Table */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <table className="w-full text-left bg-white">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+                        <table className="w-full text-left bg-white min-w-[600px]">
                             <thead className="bg-gray-900 text-white">
                                 <tr>
                                     <th className="p-4">Menu Item</th>

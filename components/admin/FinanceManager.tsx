@@ -42,6 +42,10 @@ const FinanceManager: React.FC = () => {
     const [methodFilter, setMethodFilter] = useState<'ALL' | FinanceMethod>('ALL');
     const [showMobileFilters, setShowMobileFilters] = useState(false);
 
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
     useEffect(() => {
         fetchRecords();
     }, []);
@@ -132,6 +136,13 @@ const FinanceManager: React.FC = () => {
             return matchesType && matchesMethod && matchesMonth && matchesRange;
         });
     }, [records, monthFilter, quickRange, startDate, endDate, typeFilter, methodFilter]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [quickRange, monthFilter, startDate, endDate, typeFilter, methodFilter]);
+
+    const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+    const paginatedRecords = filteredRecords.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     const summary = useMemo(() => {
         return filteredRecords.reduce(
@@ -465,12 +476,12 @@ const FinanceManager: React.FC = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            {filteredRecords.length === 0 && (
+                                            {paginatedRecords.length === 0 && (
                                                 <tr>
                                                     <td colSpan={7} className="p-6 text-center text-gray-400">Belum ada data untuk filter ini.</td>
                                                 </tr>
                                             )}
-                                            {filteredRecords.map((record) => (
+                                            {paginatedRecords.map((record) => (
                                                 <tr key={record.id} className="hover:bg-gray-50">
                                                     <td className="p-3">{new Date(record.transaction_date).toLocaleDateString('id-ID')}</td>
                                                     <td className="p-3">
@@ -502,10 +513,10 @@ const FinanceManager: React.FC = () => {
 
                                 {/* Mobile Cards */}
                                 <div className="md:hidden divide-y divide-gray-100">
-                                    {filteredRecords.length === 0 && (
+                                    {paginatedRecords.length === 0 && (
                                         <div className="p-6 text-center text-gray-400">Belum ada data untuk filter ini.</div>
                                     )}
-                                    {filteredRecords.map((record) => (
+                                    {paginatedRecords.map((record) => (
                                         <div key={record.id} className="p-4 space-y-2">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div>
@@ -543,6 +554,49 @@ const FinanceManager: React.FC = () => {
                                         </div>
                                     ))}
                                 </div>
+
+                                {/* Pagination Controls */}
+                                {filteredRecords.length > 0 && (
+                                    <div className="p-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm text-gray-600">Tampilkan</span>
+                                            <select
+                                                value={itemsPerPage}
+                                                onChange={(e) => {
+                                                    setItemsPerPage(Number(e.target.value));
+                                                    setCurrentPage(1);
+                                                }}
+                                                className="px-2 py-1 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brewasa-copper/50"
+                                            >
+                                                <option value={10}>10</option>
+                                                <option value={20}>20</option>
+                                                <option value={50}>50</option>
+                                                <option value={100}>100</option>
+                                            </select>
+                                            <span className="text-sm text-gray-600">data per halaman</span>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                                disabled={currentPage === 1}
+                                                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed bg-white"
+                                            >
+                                                Sebelumnya
+                                            </button>
+                                            <span className="text-sm text-gray-600 px-2">
+                                                Halaman {currentPage} dari {totalPages}
+                                            </span>
+                                            <button
+                                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                                disabled={currentPage >= totalPages}
+                                                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed bg-white"
+                                            >
+                                                Selanjutnya
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>

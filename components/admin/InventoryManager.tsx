@@ -242,8 +242,8 @@ const InventoryManager: React.FC = () => {
             {/* Content Switch */}
             {activeTab === 'ingredients' ? (
                 /* List Ingredients */
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <table className="w-full text-left">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+                    <table className="w-full text-left min-w-[600px]">
                         <thead className="bg-gray-50 border-b">
                             <tr>
                                 <th className="p-4 font-semibold text-gray-600">Nama Bahan</th>
@@ -309,8 +309,8 @@ const InventoryManager: React.FC = () => {
                 </div>
             ) : (
                 /* Logs Tab */
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <table className="w-full text-left">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+                    <table className="w-full text-left min-w-[600px]">
                         <thead className="bg-gray-50 border-b">
                             <tr>
                                 <th className="p-4 font-semibold text-gray-600">Waktu</th>
