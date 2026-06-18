@@ -6,6 +6,7 @@ export interface MenuItem {
   tags: string[];
   image: string;
   forWhat: string;
+  manualRecipe?: string;
   category?: "MAIN" | "ADDON" | "SPECIAL";
   is_available?: boolean;
   is_consignment?: boolean;

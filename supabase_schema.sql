@@ -40,6 +40,12 @@ create table if not exists public.menu_recipes (
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- Manual recipe instructions shown in the admin recipe modal and print report.
+alter table public.menu_items
+add column if not exists manual_recipe text default '';
+
+comment on column public.menu_items.manual_recipe is 'Freeform manual recipe steps/instructions for baristas';
+
 -- 4. Stock Logs Table
 create table if not exists public.stock_logs (
     id uuid default uuid_generate_v4() primary key,
