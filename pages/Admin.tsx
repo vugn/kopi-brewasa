@@ -11,6 +11,7 @@ import CostingManager from '../components/admin/CostingManager';
 import ExportManager from '../components/admin/ExportManager';
 import NotesManager from '../components/admin/NotesManager';
 import FinanceManager from '../components/admin/FinanceManager';
+import TopSpenders from '../components/admin/TopSpenders';
 import { Package, Calculator } from 'lucide-react';
 
 const Admin: React.FC = () => {
@@ -150,6 +151,7 @@ const Admin: React.FC = () => {
                         { id: 'stories', label: 'Story Moderation' },
                         { id: 'announcements', label: 'Announcements' },
                         { id: 'notes', label: 'Catatan / Notes' },
+                        { id: 'top-spenders', label: 'Pelanggan Setia' },
                         { id: 'inventory', label: 'Inventory & Stok' },
                         { id: 'costing', label: 'HPP & Costing' },
                         { id: 'exports', label: 'Export Data' }
@@ -193,6 +195,7 @@ const Admin: React.FC = () => {
                 {activeTab === 'stories' && <StoryModerator />}
                 {activeTab === 'announcements' && <AnnouncementManager />}
                 {activeTab === 'notes' && <NotesManager />}
+                {activeTab === 'top-spenders' && <TopSpenders />}
                 {activeTab === 'inventory' && <InventoryManager />}
                 {activeTab === 'costing' && <CostingManager />}
                 {activeTab === 'exports' && <ExportManager />}

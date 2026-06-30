@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { FileDown, Loader2, Database, Receipt, Coffee, Activity } from 'lucide-react';
+import { FileDown, Loader2, Database, Receipt, Coffee, Activity, TrendingUp } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const ExportManager: React.FC = () => {
     const [loading, setLoading] = useState(false);
@@ -140,6 +141,129 @@ const ExportManager: React.FC = () => {
         setLoading(false);
     };
 
+    const handleExportFinancialReport = async () => {
+        setLoading(true);
+        try {
+            // 1. Fetch Data
+            const [transactionsRes, stockLogsRes, overheadsRes, ingredientsRes] = await Promise.all([
+                supabase.from('transactions').select(`id, created_at, total_amount, payment_method, status`).eq('status', 'COMPLETED'),
+                supabase.from('stock_logs').select(`created_at, change_amount, reason, notes, ingredients (name, price_per_unit)`).eq('reason', 'purchase'),
+                supabase.from('overhead_costs').select('*'),
+                supabase.from('ingredients').select('min_stock, price_per_unit')
+            ]);
+
+            if (transactionsRes.error) throw transactionsRes.error;
+            if (stockLogsRes.error) throw stockLogsRes.error;
+            if (overheadsRes.error) throw overheadsRes.error;
+
+            const transactions = transactionsRes.data || [];
+            const stockLogs = stockLogsRes.data || [];
+            const overheads = overheadsRes.data || [];
+            const ingredientsData = ingredientsRes.data || [];
+
+            let estimasiModalAwal = 0;
+            ingredientsData.forEach((ing: any) => {
+                estimasiModalAwal += (ing.min_stock || 0) * (ing.price_per_unit || 0);
+            });
+
+            // 2. Format Data for Cashbook (Buku Kas)
+            const cashbookEntries: any[] = [];
+            let totalIncome = 0;
+            let totalRestockCost = 0;
+
+            transactions.forEach((t: any) => {
+                cashbookEntries.push({
+                    timestamp: new Date(t.created_at).getTime(),
+                    Tanggal: new Date(t.created_at).toLocaleString('id-ID'),
+                    Keterangan: `Penjualan (${t.payment_method})`,
+                    Uang_Masuk: t.total_amount,
+                    Uang_Keluar: 0,
+                });
+                totalIncome += t.total_amount;
+            });
+
+            stockLogs.forEach((s: any) => {
+                const price = s.ingredients?.price_per_unit || 0;
+                const qty = Math.abs(s.change_amount);
+                const cost = qty * price;
+
+                cashbookEntries.push({
+                    timestamp: new Date(s.created_at).getTime(),
+                    Tanggal: new Date(s.created_at).toLocaleString('id-ID'),
+                    Keterangan: `Restock Bahan: ${s.ingredients?.name || 'Unknown'} (${qty} unit)`,
+                    Uang_Masuk: 0,
+                    Uang_Keluar: cost,
+                });
+                totalRestockCost += cost;
+            });
+
+            // Sort by timestamp ASC
+            cashbookEntries.sort((a, b) => a.timestamp - b.timestamp);
+
+            // Calculate Running Balance
+            let currentBalance = 0;
+            const finalCashbook = cashbookEntries.map(entry => {
+                currentBalance += entry.Uang_Masuk;
+                currentBalance -= entry.Uang_Keluar;
+
+                return {
+                    Tanggal: entry.Tanggal,
+                    Keterangan: entry.Keterangan,
+                    Uang_Masuk: entry.Uang_Masuk,
+                    Uang_Keluar: entry.Uang_Keluar,
+                    Saldo: currentBalance
+                };
+            });
+
+            // 3. Process Overheads
+            const overheadDetails: any[] = [];
+            let totalFixedOverheadPerMonth = 0;
+            let totalVariableOverheadPerMonth = 0;
+
+            overheads.forEach((o: any) => {
+                const amount = o.period === 'daily' ? o.amount * 30 : o.amount;
+                if (o.type === 'fixed') totalFixedOverheadPerMonth += amount;
+                else totalVariableOverheadPerMonth += amount;
+
+                overheadDetails.push({
+                    Nama_Biaya: o.name,
+                    Tipe: o.type === 'fixed' ? 'Tetap (Fixed)' : 'Variabel',
+                    Periode: o.period === 'daily' ? 'Harian' : 'Bulanan',
+                    Nominal_Asli: o.amount,
+                    Estimasi_Per_Bulan: amount
+                });
+            });
+            const totalOverheadPerMonth = totalFixedOverheadPerMonth + totalVariableOverheadPerMonth;
+
+            // 4. Generate Dashboard/Summary rows
+            const dashboardData = [
+                { Metrik: 'Estimasi Modal Restock Awal (0 hingga Minimum Stok)', Nilai: estimasiModalAwal },
+                { Metrik: 'Total Uang Masuk (Penjualan)', Nilai: totalIncome },
+                { Metrik: 'Total Uang Keluar (Restock Bahan)', Nilai: totalRestockCost },
+                { Metrik: 'Saldo Kas Kotor Saat Ini', Nilai: currentBalance },
+                { Metrik: 'Total Estimasi Overhead / Gaji (Per Bulan)', Nilai: totalOverheadPerMonth },
+            ];
+
+            // 5. Create Excel Book
+            const wb = XLSX.utils.book_new();
+
+            const wsCashbook = XLSX.utils.json_to_sheet(finalCashbook);
+            XLSX.utils.book_append_sheet(wb, wsCashbook, "Buku Kas (Arus Kas)");
+
+            const wsDashboard = XLSX.utils.json_to_sheet(dashboardData);
+            XLSX.utils.book_append_sheet(wb, wsDashboard, "Ringkasan");
+
+            const wsOverhead = XLSX.utils.json_to_sheet(overheadDetails);
+            XLSX.utils.book_append_sheet(wb, wsOverhead, "Data Overhead & Gaji");
+
+            XLSX.writeFile(wb, `Buku_Kas_Brewasa_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        } catch (err: any) {
+            alert('Gagal mengekspor laporan keuangan: ' + err.message);
+        }
+        setLoading(false);
+    };
+
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold text-brewasa-dark flex items-center gap-2">
@@ -221,6 +345,25 @@ const ExportManager: React.FC = () => {
                     >
                         {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <FileDown className="w-4 h-4" />}
                         Download Overhead
+                    </button>
+                </div>
+
+                {/* Financial Report Card */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition md:col-span-2">
+                    <div className="flex items-start justify-between mb-4">
+                        <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                            <TrendingUp className="w-6 h-6" />
+                        </div>
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-800 mb-2">Laporan Keuangan: Buku Kas</h3>
+                    <p className="text-sm text-gray-500 mb-6">Laporan kronologis Arus Kas (Uang Masuk dari Penjualan, Uang Keluar untuk Restock) beserta Ringkasan & rincian Gaji/Overhead.</p>
+                    <button
+                        onClick={handleExportFinancialReport}
+                        disabled={loading}
+                        className="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition flex justify-center items-center gap-2 shadow-sm"
+                    >
+                        {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <FileDown className="w-4 h-4" />}
+                        Download Laporan Keuangan Lengkap
                     </button>
                 </div>
             </div>
