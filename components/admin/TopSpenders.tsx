@@ -21,10 +21,16 @@ const TopSpenders: React.FC = () => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [timeFilter, setTimeFilter] = useState<'ALL' | 'THIS_MONTH'>('ALL');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     useEffect(() => {
         fetchTransactions();
     }, []);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [timeFilter]);
 
     const fetchTransactions = async () => {
         setLoading(true);
@@ -81,8 +87,10 @@ const TopSpenders: React.FC = () => {
             }
         });
 
-        // Convert to array and sort by total spent descending
-        return Array.from(statsMap.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+        // Convert to array, filter out 0, and sort by total spent descending
+        return Array.from(statsMap.values())
+            .filter(customer => customer.totalSpent > 0)
+            .sort((a, b) => b.totalSpent - a.totalSpent);
     }, [transactions, timeFilter]);
 
     if (loading) {
@@ -180,35 +188,63 @@ const TopSpenders: React.FC = () => {
                     </div>
 
                     {/* The rest of the leaderboard list */}
-                    {topSpenders.length > 3 && (
-                        <div className="md:col-span-2 lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden order-2">
-                            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-                                <h3 className="font-bold text-gray-800">Runner Ups</h3>
-                            </div>
-                            <div className="divide-y divide-gray-100">
-                                {topSpenders.slice(3).map((customer, index) => (
-                                    <div key={customer.name} className="flex items-center justify-between p-4 sm:p-6 hover:bg-gray-50 transition-colors">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 font-bold flex items-center justify-center text-sm shrink-0">
-                                                {index + 4}
+                    {topSpenders.length > 3 && (() => {
+                        const runnerUps = topSpenders.slice(3);
+                        const totalPages = Math.ceil(runnerUps.length / itemsPerPage);
+                        const paginatedRunnerUps = runnerUps.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+                        return (
+                            <div className="md:col-span-2 lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden order-2">
+                                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                                    <h3 className="font-bold text-gray-800">Runner Ups</h3>
+                                </div>
+                                <div className="divide-y divide-gray-100">
+                                    {paginatedRunnerUps.map((customer, idx) => {
+                                        const actualRank = (currentPage - 1) * itemsPerPage + idx + 4;
+                                        return (
+                                            <div key={customer.name} className="flex items-center justify-between p-4 sm:p-6 hover:bg-gray-50 transition-colors">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 font-bold flex items-center justify-center text-sm shrink-0">
+                                                        {actualRank}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-bold text-gray-800 capitalize text-base sm:text-lg">{customer.name}</h4>
+                                                        <p className="text-xs sm:text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                                                            <Calendar className="w-3 h-3" /> {customer.visitCount} Kedatangan
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="text-right">
+                                                    <p className="font-black text-brewasa-dark text-base sm:text-lg">Rp {customer.totalSpent.toLocaleString('id-ID')}</p>
+                                                    <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">Update Terakhir: {new Date(customer.lastVisit).toLocaleDateString('id-ID')}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <h4 className="font-bold text-gray-800 capitalize text-base sm:text-lg">{customer.name}</h4>
-                                                <p className="text-xs sm:text-sm text-gray-500 flex items-center gap-1 mt-0.5">
-                                                    <Calendar className="w-3 h-3" /> {customer.visitCount} Kedatangan
-                                                </p>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="text-right">
-                                            <p className="font-black text-brewasa-dark text-base sm:text-lg">Rp {customer.totalSpent.toLocaleString('id-ID')}</p>
-                                            <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">Update Terakhir: {new Date(customer.lastVisit).toLocaleDateString('id-ID')}</p>
-                                        </div>
+                                        );
+                                    })}
+                                </div>
+                                {totalPages > 1 && (
+                                    <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-4">
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            disabled={currentPage === 1}
+                                            className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-white disabled:opacity-50 transition-colors"
+                                        >
+                                            Sebelumnya
+                                        </button>
+                                        <span className="text-sm font-medium text-gray-500">Halaman {currentPage} dari {totalPages}</span>
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={currentPage >= totalPages}
+                                            className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-white disabled:opacity-50 transition-colors"
+                                        >
+                                            Selanjutnya
+                                        </button>
                                     </div>
-                                ))}
+                                )}
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                 </div>
             )}
         </div>

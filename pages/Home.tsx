@@ -9,6 +9,7 @@ import AiBarista from '../components/AiBarista';
 import Location from '../components/Location';
 import Contact from '../components/Contact';
 import PojokCerita from '../components/PojokCerita';
+import TopSpendersSection from '../components/TopSpendersSection';
 import CartFloatingButton from '../components/CartFloatingButton';
 import CartDrawer from '../components/CartDrawer';
 
@@ -24,6 +25,7 @@ const Home: React.FC = () => {
                 <Philosophy />
                 <Menu />
                 <PojokCerita />
+                <TopSpendersSection />
                 <Vibe />
                 <Location />
                 <Contact />
