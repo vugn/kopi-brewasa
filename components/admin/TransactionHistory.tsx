@@ -72,8 +72,12 @@ const TransactionHistory: React.FC = () => {
         dailyCups: 0, weeklyCups: 0, monthlyCups: 0,
         totalCups: 0,
         dailyConsignment: 0, weeklyConsignment: 0, monthlyConsignment: 0,
-        dailyConsignmentProfit: 0, weeklyConsignmentProfit: 0, monthlyConsignmentProfit: 0
+        dailyConsignmentProfit: 0, weeklyConsignmentProfit: 0, monthlyConsignmentProfit: 0,
+        monthlyConsignmentHakCash: 0, monthlyConsignmentHakQris: 0, monthlyConsignmentHakTransfer: 0
     });
+    const [showConsignmentDetails, setShowConsignmentDetails] = useState(false);
+    const [showFilterConsignmentDetails, setShowFilterConsignmentDetails] = useState(false);
+    const [showFilterProfitDetails, setShowFilterProfitDetails] = useState(false);
 
     // Edit Items State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -266,6 +270,9 @@ const TransactionHistory: React.FC = () => {
         let dailyConsignmentProfit = 0;
         let weeklyConsignmentProfit = 0;
         let monthlyConsignmentProfit = 0;
+        let monthlyConsignmentHakCash = 0;
+        let monthlyConsignmentHakQris = 0;
+        let monthlyConsignmentHakTransfer = 0;
 
         data.forEach(t => {
             // Only count completed transactions for stats
@@ -311,6 +318,11 @@ const TransactionHistory: React.FC = () => {
                 monthlyCups += cupsInTransaction;
                 monthlyConsignment += consignmentRevenue;
                 monthlyConsignmentProfit += consignmentProfit;
+                
+                const hakPenitip = consignmentRevenue - consignmentProfit;
+                if (t.payment_method === 'CASH') monthlyConsignmentHakCash += hakPenitip;
+                else if (t.payment_method === 'QRIS') monthlyConsignmentHakQris += hakPenitip;
+                else if (t.payment_method === 'TRANSFER') monthlyConsignmentHakTransfer += hakPenitip;
             }
 
             // Total All Time
@@ -321,7 +333,8 @@ const TransactionHistory: React.FC = () => {
             daily, weekly, monthly,
             dailyCups, weeklyCups, monthlyCups, totalCups,
             dailyConsignment, weeklyConsignment, monthlyConsignment,
-            dailyConsignmentProfit, weeklyConsignmentProfit, monthlyConsignmentProfit
+            dailyConsignmentProfit, weeklyConsignmentProfit, monthlyConsignmentProfit,
+            monthlyConsignmentHakCash, monthlyConsignmentHakQris, monthlyConsignmentHakTransfer
         });
     }, []);
 
@@ -643,7 +656,7 @@ const TransactionHistory: React.FC = () => {
                         </div>
                         <div className="text-left">
                             <p className="text-xs text-gray-500">Omzet Bulan Ini</p>
-                            <p className="text-lg font-bold text-brewasa-dark">Rp {(stats.monthly - stats.monthlyConsignment).toLocaleString('id-ID')}</p>
+                            <p className="text-lg font-bold text-brewasa-dark">Rp {stats.monthly.toLocaleString('id-ID')}</p>
                         </div>
                     </div>
                     <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${showStatsOnMobile ? 'rotate-180' : ''}`} />
@@ -655,7 +668,7 @@ const TransactionHistory: React.FC = () => {
                         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
                             <div>
                                 <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Omzet Hari Ini</p>
-                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {(stats.daily - stats.dailyConsignment).toLocaleString('id-ID')}</h3>
+                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {stats.daily.toLocaleString('id-ID')}</h3>
                                 <p className="text-[10px] md:text-xs text-gray-400 mt-1 font-medium">{stats.dailyCups} Cup</p>
                             </div>
                             <div className="hidden md:block p-3 bg-green-50 rounded-xl text-green-600">
@@ -665,7 +678,7 @@ const TransactionHistory: React.FC = () => {
                         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
                             <div>
                                 <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Omzet Minggu</p>
-                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {(stats.weekly - stats.weeklyConsignment).toLocaleString('id-ID')}</h3>
+                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {stats.weekly.toLocaleString('id-ID')}</h3>
                                 <p className="text-[10px] md:text-xs text-gray-400 mt-1 font-medium">{stats.weeklyCups} Cup</p>
                             </div>
                             <div className="hidden md:block p-3 bg-blue-50 rounded-xl text-blue-600">
@@ -675,7 +688,7 @@ const TransactionHistory: React.FC = () => {
                         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
                             <div>
                                 <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Omzet Bulan</p>
-                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {(stats.monthly - stats.monthlyConsignment).toLocaleString('id-ID')}</h3>
+                                <h3 className="text-lg md:text-2xl font-bold text-brewasa-dark">Rp {stats.monthly.toLocaleString('id-ID')}</h3>
                                 <p className="text-[10px] md:text-xs text-gray-400 mt-1 font-medium">{stats.monthlyCups} Cup</p>
                             </div>
                             <div className="hidden md:block p-3 bg-purple-50 rounded-xl text-purple-600">
@@ -697,17 +710,40 @@ const TransactionHistory: React.FC = () => {
                     {/* Consignment Stats Row */}
                     {(stats.monthlyConsignment > 0 || stats.monthlyConsignmentProfit > 0) && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                            <div className="bg-amber-50 p-4 md:p-5 rounded-2xl shadow-sm border border-amber-200">
-                                <p className="text-xs md:text-sm text-amber-700 font-medium mb-1 flex items-center gap-1"><Package className="w-3 h-3 md:w-4 md:h-4" /> Titipan (Bulan Ini)</p>
-                                <h3 className="text-lg md:text-xl font-bold text-amber-800">Rp {stats.monthlyConsignment.toLocaleString('id-ID')}</h3>
+                            <div className="bg-amber-50 p-4 md:p-5 rounded-2xl shadow-sm border border-amber-200 transition-all duration-300">
+                                <div className="flex items-center justify-between mb-1">
+                                    <p className="text-xs md:text-sm text-amber-700 font-medium flex items-center gap-1"><Package className="w-3 h-3 md:w-4 md:h-4" /> Omzet Titipan (Hak Penitip)</p>
+                                    <button onClick={() => setShowConsignmentDetails(!showConsignmentDetails)} className="text-amber-600 hover:bg-amber-100 p-1 rounded transition-colors" title="Lihat Pembagian Metode Pembayaran">
+                                        <ChevronDown className={`w-4 h-4 transition-transform ${showConsignmentDetails ? 'rotate-180' : ''}`} />
+                                    </button>
+                                </div>
+                                <h3 className="text-lg md:text-xl font-bold text-amber-800">Rp {(stats.monthlyConsignment - stats.monthlyConsignmentProfit).toLocaleString('id-ID')}</h3>
+                                {showConsignmentDetails && (
+                                    <div className="mt-4 pt-3 border-t border-amber-200/60 space-y-2">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-amber-700 font-medium">Tunai (CASH)</span>
+                                            <span className="font-bold text-amber-900">Rp {stats.monthlyConsignmentHakCash.toLocaleString('id-ID')}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-amber-700 font-medium">QRIS</span>
+                                            <span className="font-bold text-amber-900">Rp {stats.monthlyConsignmentHakQris.toLocaleString('id-ID')}</span>
+                                        </div>
+                                        {stats.monthlyConsignmentHakTransfer > 0 && (
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-amber-700 font-medium">Transfer</span>
+                                                <span className="font-bold text-amber-900">Rp {stats.monthlyConsignmentHakTransfer.toLocaleString('id-ID')}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div className="bg-green-50 p-4 md:p-5 rounded-2xl shadow-sm border border-green-200">
-                                <p className="text-xs md:text-sm text-green-700 font-medium mb-1">Profit Titipan</p>
+                                <p className="text-xs md:text-sm text-green-700 font-medium mb-1">Profit Jasa Titip</p>
                                 <h3 className="text-lg md:text-xl font-bold text-green-800">Rp {stats.monthlyConsignmentProfit.toLocaleString('id-ID')}</h3>
                             </div>
                             <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-gray-100">
-                                <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Total Omzet (incl. Titipan)</p>
-                                <h3 className="text-lg md:text-xl font-bold text-brewasa-dark">Rp {stats.monthly.toLocaleString('id-ID')}</h3>
+                                <p className="text-xs md:text-sm text-gray-500 font-medium mb-1">Hasil Bersih Brewasa</p>
+                                <h3 className="text-lg md:text-xl font-bold text-brewasa-dark">Rp {(stats.monthly - (stats.monthlyConsignment - stats.monthlyConsignmentProfit)).toLocaleString('id-ID')}</h3>
                             </div>
                         </div>
                     )}
@@ -847,18 +883,27 @@ const TransactionHistory: React.FC = () => {
 
                 {/* Content - always visible on desktop, toggle on mobile */}
                 <div className={`${showFilterSummaryOnMobile ? 'block' : 'hidden'} md:block p-4 pt-2 md:pt-0`}>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-3">
                         <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
-                            <p className="text-xs opacity-75 mb-1">Omzet Sendiri</p>
+                            <p className="text-xs opacity-75 mb-1">Total Omzet</p>
+                            <p className="text-lg md:text-xl font-bold">
+                                Rp {(() => {
+                                    const completed = filtered.filter(t => t.status === 'COMPLETED');
+                                    return completed.reduce((acc, t) => acc + t.total_amount, 0).toLocaleString('id-ID');
+                                })()}
+                            </p>
+                        </div>
+                        <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                            <p className="text-xs opacity-75 mb-1">Hasil Bersih Brewasa</p>
                             <p className="text-lg md:text-xl font-bold">
                                 Rp {(() => {
                                     const completed = filtered.filter(t => t.status === 'COMPLETED');
                                     const totalOmzet = completed.reduce((acc, t) => acc + t.total_amount, 0);
-                                    const consignmentRevenue = completed.reduce((acc, t) => {
+                                    const uangPenitip = completed.reduce((acc, t) => {
                                         const items = t.transaction_items || t.items || [];
-                                        return acc + items.filter(i => i.is_consignment).reduce((sum, i) => sum + (i.price * i.quantity), 0);
+                                        return acc + items.filter(i => i.is_consignment).reduce((sum, i) => sum + ((i.consignment_cost || 0) * i.quantity), 0);
                                     }, 0);
-                                    return (totalOmzet - consignmentRevenue).toLocaleString('id-ID');
+                                    return (totalOmzet - uangPenitip).toLocaleString('id-ID');
                                 })()}
                             </p>
                         </div>
@@ -892,15 +937,93 @@ const TransactionHistory: React.FC = () => {
                             return acc + items.filter(i => i.is_consignment).reduce((sum, i) => sum + ((i.price - (i.consignment_cost || 0)) * i.quantity), 0);
                         }, 0);
                         if (consignmentRevenue <= 0) return null;
+                        let hakCash = 0;
+                        let hakQris = 0;
+                        let hakTransfer = 0;
+                        let profitCash = 0;
+                        let profitQris = 0;
+                        let profitTransfer = 0;
+                        
+                        completed.forEach(t => {
+                            let hakPenitip = 0;
+                            let profit = 0;
+                            
+                            (t.transaction_items || t.items || []).forEach(i => {
+                                if (i.is_consignment) {
+                                    hakPenitip += (i.consignment_cost || 0) * i.quantity;
+                                    profit += (i.price - (i.consignment_cost || 0)) * i.quantity;
+                                }
+                            });
+                            
+                            if (t.payment_method === 'CASH') {
+                                hakCash += hakPenitip;
+                                profitCash += profit;
+                            } else if (t.payment_method === 'QRIS') {
+                                hakQris += hakPenitip;
+                                profitQris += profit;
+                            } else if (t.payment_method === 'TRANSFER') {
+                                hakTransfer += hakPenitip;
+                                profitTransfer += profit;
+                            }
+                        });
+
                         return (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 border-t border-white/20 pt-3">
-                                <div className="bg-amber-500/20 p-3 rounded-lg backdrop-blur-sm">
-                                    <p className="text-xs opacity-75 mb-1 flex items-center gap-1"><Package className="w-3 h-3" /> Penjualan Titipan</p>
-                                    <p className="text-lg font-bold">Rp {consignmentRevenue.toLocaleString('id-ID')}</p>
-                                </div>
-                                <div className="bg-green-500/20 p-3 rounded-lg backdrop-blur-sm">
-                                    <p className="text-xs opacity-75 mb-1">Profit Titipan</p>
-                                    <p className="text-lg font-bold">Rp {consignmentProfit.toLocaleString('id-ID')}</p>
+                            <div className="border-t border-white/20 pt-3 mt-1">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                    <div className="bg-amber-500/20 p-3 rounded-lg backdrop-blur-sm transition-all duration-300">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <p className="text-xs opacity-75 flex items-center gap-1"><Package className="w-3 h-3" /> Omzet Titipan (Hak Penitip)</p>
+                                            <button onClick={() => setShowFilterConsignmentDetails(!showFilterConsignmentDetails)} className="text-white hover:bg-white/20 p-1 rounded transition-colors" title="Lihat Pembagian Metode Pembayaran">
+                                                <ChevronDown className={`w-4 h-4 transition-transform ${showFilterConsignmentDetails ? 'rotate-180' : ''}`} />
+                                            </button>
+                                        </div>
+                                        <p className="text-lg font-bold">Rp {(consignmentRevenue - consignmentProfit).toLocaleString('id-ID')}</p>
+                                        {showFilterConsignmentDetails && (
+                                            <div className="mt-3 pt-2 border-t border-white/20 space-y-1.5 text-sm">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="opacity-80">Tunai (CASH)</span>
+                                                    <span className="font-bold">Rp {hakCash.toLocaleString('id-ID')}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="opacity-80">QRIS</span>
+                                                    <span className="font-bold">Rp {hakQris.toLocaleString('id-ID')}</span>
+                                                </div>
+                                                {hakTransfer > 0 && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="opacity-80">Transfer</span>
+                                                        <span className="font-bold">Rp {hakTransfer.toLocaleString('id-ID')}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="bg-green-500/20 p-3 rounded-lg backdrop-blur-sm transition-all duration-300">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <p className="text-xs opacity-75 flex items-center gap-1">Profit Jasa Titip</p>
+                                            <button onClick={() => setShowFilterProfitDetails(!showFilterProfitDetails)} className="text-white hover:bg-white/20 p-1 rounded transition-colors" title="Lihat Pembagian Metode Pembayaran">
+                                                <ChevronDown className={`w-4 h-4 transition-transform ${showFilterProfitDetails ? 'rotate-180' : ''}`} />
+                                            </button>
+                                        </div>
+                                        <p className="text-lg font-bold">Rp {consignmentProfit.toLocaleString('id-ID')}</p>
+                                        {showFilterProfitDetails && (
+                                            <div className="mt-3 pt-2 border-t border-white/20 space-y-1.5 text-sm">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="opacity-80">Tunai (CASH)</span>
+                                                    <span className="font-bold">Rp {profitCash.toLocaleString('id-ID')}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="opacity-80">QRIS</span>
+                                                    <span className="font-bold">Rp {profitQris.toLocaleString('id-ID')}</span>
+                                                </div>
+                                                {profitTransfer > 0 && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="opacity-80">Transfer</span>
+                                                        <span className="font-bold">Rp {profitTransfer.toLocaleString('id-ID')}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         );

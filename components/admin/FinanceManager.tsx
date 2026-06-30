@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { ArrowDownCircle, ArrowUpCircle, ChevronDown, Filter, Loader2, Trash2, Wallet } from 'lucide-react';
-
+import { ArrowDownCircle, ArrowUpCircle, ChevronDown, Filter, Loader2, Trash2, Wallet, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 type FinanceType = 'INCOME' | 'EXPENSE';
 type FinanceMethod = 'CASH' | 'QRIS';
 type QuickRange = 'ALL' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'CUSTOM';
@@ -217,6 +217,22 @@ const FinanceManager: React.FC = () => {
         }
     };
 
+    const exportToExcel = () => {
+        const dataToExport = filteredRecords.map(t => ({
+            Tanggal: new Date(t.transaction_date).toLocaleDateString('id-ID'),
+            Jenis: t.type === 'INCOME' ? 'Uang Masuk' : 'Uang Keluar',
+            Kategori: t.category,
+            Metode: t.payment_method,
+            Nominal: t.amount,
+            Catatan: t.note || '-'
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Keuangan");
+        XLSX.writeFile(wb, `Laporan_Keuangan_Brewasa_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
     return (
         <div className="space-y-4 md:space-y-6">
             <h2 className="text-xl md:text-2xl font-bold text-brewasa-dark flex items-center gap-2">
@@ -347,15 +363,32 @@ const FinanceManager: React.FC = () => {
 
                 <div className="lg:col-span-2 bg-white border border-gray-100 rounded-xl p-4 md:p-5 shadow-sm space-y-4">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                        <h3 className="font-bold text-brewasa-dark flex items-center gap-2"><Filter className="w-4 h-4" /> Filter Data</h3>
-                        <button
-                            type="button"
-                            onClick={() => setShowMobileFilters((prev) => !prev)}
-                            className="md:hidden inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700"
-                        >
-                            {showMobileFilters ? 'Tutup' : 'Buka'}
-                            <ChevronDown className={`w-4 h-4 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`} />
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <h3 className="font-bold text-brewasa-dark flex items-center gap-2"><Filter className="w-4 h-4" /> Filter Data</h3>
+                            <button
+                                onClick={exportToExcel}
+                                className="hidden md:flex px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors items-center gap-1.5"
+                                title="Export data keuangan yang terfilter ke Excel"
+                            >
+                                <Download className="w-3.5 h-3.5" /> Export Excel
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={exportToExcel}
+                                className="md:hidden inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors"
+                            >
+                                <Download className="w-3.5 h-3.5" /> Export
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowMobileFilters((prev) => !prev)}
+                                className="md:hidden inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700"
+                            >
+                                {showMobileFilters ? 'Tutup' : 'Buka'}
+                                <ChevronDown className={`w-4 h-4 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`} />
+                            </button>
+                        </div>
                     </div>
 
                     <div className={`${showMobileFilters ? 'block' : 'hidden'} md:block space-y-3`}>
