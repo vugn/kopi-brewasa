@@ -41,6 +41,10 @@ interface MenuItem {
     price: string;
 }
 
+interface TransactionHistoryProps {
+    isAdmin: boolean;
+}
+
 const parsePrice = (priceStr: string | number) => {
     if (typeof priceStr === 'number') return priceStr;
     if (!priceStr) return 0;
@@ -57,7 +61,7 @@ const getBusinessDate = (dateParam: string | Date, openHour: number) => {
     return d;
 };
 
-const TransactionHistory: React.FC = () => {
+const TransactionHistory: React.FC<TransactionHistoryProps> = ({ isAdmin }) => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('ALL');
@@ -398,6 +402,11 @@ const TransactionHistory: React.FC = () => {
     };
 
     const deleteTransaction = async (id: string) => {
+        if (!isAdmin) {
+            alert('Hanya admin yang dapat menghapus transaksi.');
+            return;
+        }
+
         if (!window.confirm('Apakah Anda yakin ingin menghapus transaksi ini? Tindakan ini tidak dapat dibatalkan.')) return;
 
         // Use RPC to delete and restore stock
@@ -1158,9 +1167,11 @@ const TransactionHistory: React.FC = () => {
                                                         <button onClick={() => handlePrintReceipt(t)} className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1 rounded" title="Cetak Struk">
                                                             <Printer className="w-3.5 h-3.5" />
                                                         </button>
-                                                        <button onClick={() => deleteTransaction(t.id)} className="text-red-400 hover:text-red-700 hover:bg-red-50 p-1 rounded" title="Hapus">
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
+                                                        {isAdmin && (
+                                                            <button onClick={() => deleteTransaction(t.id)} className="text-red-400 hover:text-red-700 hover:bg-red-50 p-1 rounded" title="Hapus">
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -1279,7 +1290,7 @@ const TransactionHistory: React.FC = () => {
                                     </div>
 
                                     {/* Action Buttons - large, labeled */}
-                                    <div className="grid grid-cols-3 gap-2">
+                                    <div className={`grid gap-2 ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'}`}>
                                         <button
                                             onClick={() => openEditModal(t)}
                                             className="flex items-center justify-center gap-1.5 py-2.5 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs border border-blue-100 active:bg-blue-100 transition-colors"
@@ -1292,12 +1303,14 @@ const TransactionHistory: React.FC = () => {
                                         >
                                             <Printer className="w-4 h-4" /> Print
                                         </button>
-                                        <button
-                                            onClick={() => deleteTransaction(t.id)}
-                                            className="flex items-center justify-center gap-1.5 py-2.5 bg-red-50 text-red-500 rounded-xl font-bold text-xs border border-red-100 active:bg-red-100 transition-colors"
-                                        >
-                                            <Trash2 className="w-4 h-4" /> Hapus
-                                        </button>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => deleteTransaction(t.id)}
+                                                className="flex items-center justify-center gap-1.5 py-2.5 bg-red-50 text-red-500 rounded-xl font-bold text-xs border border-red-100 active:bg-red-100 transition-colors"
+                                            >
+                                                <Trash2 className="w-4 h-4" /> Hapus
+                                            </button>
+                                        )}
                                     </div>
 
                                     {/* Voucher Notes */}
