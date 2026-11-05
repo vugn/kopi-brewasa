@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../services/supabaseClient';
-import { ArrowDownCircle, ArrowUpCircle, ChevronDown, Filter, Loader2, Trash2, Wallet, Download } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Loader2, Plus, RotateCcw, SlidersHorizontal, Trash2, Wallet, Download, X } from 'lucide-react';
+import { usePersistentState, clearPersisted } from '../../utils/usePersistentState';
 import * as XLSX from 'xlsx';
 type FinanceType = 'INCOME' | 'EXPENSE';
 type FinanceMethod = 'CASH' | 'QRIS';
-type QuickRange = 'ALL' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'CUSTOM';
+type QuickRange = 'ALL' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'MONTH' | 'CUSTOM';
 
 interface FinanceRecord {
     id: string;
@@ -34,17 +35,19 @@ const FinanceManager: React.FC = () => {
     const [note, setNote] = useState('');
     const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
 
-    const [quickRange, setQuickRange] = useState<QuickRange>('THIS_MONTH');
-    const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7));
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [typeFilter, setTypeFilter] = useState<'ALL' | FinanceType>('ALL');
-    const [methodFilter, setMethodFilter] = useState<'ALL' | FinanceMethod>('ALL');
-    const [showMobileFilters, setShowMobileFilters] = useState(false);
+    // Semua filter disimpan di localStorage supaya tidak reset waktu balik dari recent apps / refresh.
+    const [quickRange, setQuickRange] = usePersistentState<QuickRange>('fin.range', 'THIS_MONTH');
+    const [monthFilter, setMonthFilter] = usePersistentState('fin.month', new Date().toISOString().slice(0, 7));
+    const [startDate, setStartDate] = usePersistentState('fin.start', '');
+    const [endDate, setEndDate] = usePersistentState('fin.end', '');
+    const [typeFilter, setTypeFilter] = usePersistentState<'ALL' | FinanceType>('fin.type', 'ALL');
+    const [methodFilter, setMethodFilter] = usePersistentState<'ALL' | FinanceMethod>('fin.method', 'ALL');
+    const [showForm, setShowForm] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const [itemsPerPage, setItemsPerPage] = usePersistentState('fin.perPage', 10);
 
     useEffect(() => {
         fetchRecords();
@@ -92,6 +95,12 @@ const FinanceManager: React.FC = () => {
             };
         }
 
+        if (range === 'MONTH') {
+            if (!monthFilter) return { start: null, end: null };
+            const [y, m] = monthFilter.split('-').map(Number);
+            return { start: new Date(y, m - 1, 1), end: new Date(y, m, 0, 23, 59, 59, 999) };
+        }
+
         if (range === 'THIS_YEAR') {
             return {
                 start: new Date(year, 0, 1),
@@ -105,13 +114,6 @@ const FinanceManager: React.FC = () => {
     };
 
     const filteredRecords = useMemo(() => {
-        const monthBounds = monthFilter
-            ? {
-                start: new Date(monthFilter + '-01T00:00:00'),
-                end: new Date(new Date(monthFilter + '-01T00:00:00').getFullYear(), new Date(monthFilter + '-01T00:00:00').getMonth() + 1, 0, 23, 59, 59, 999)
-            }
-            : null;
-
         const customBounds = getRangeBounds(quickRange);
 
         return records.filter((record) => {
@@ -119,11 +121,6 @@ const FinanceManager: React.FC = () => {
 
             const matchesType = typeFilter === 'ALL' || record.type === typeFilter;
             const matchesMethod = methodFilter === 'ALL' || record.payment_method === methodFilter;
-
-            let matchesMonth = true;
-            if (monthBounds) {
-                matchesMonth = recordDate >= monthBounds.start && recordDate <= monthBounds.end;
-            }
 
             let matchesRange = true;
             if (customBounds.start) {
@@ -133,7 +130,7 @@ const FinanceManager: React.FC = () => {
                 matchesRange = matchesRange && recordDate <= customBounds.end;
             }
 
-            return matchesType && matchesMethod && matchesMonth && matchesRange;
+            return matchesType && matchesMethod && matchesRange;
         });
     }, [records, monthFilter, quickRange, startDate, endDate, typeFilter, methodFilter]);
 
@@ -200,6 +197,7 @@ const FinanceManager: React.FC = () => {
         } else {
             setAmount('');
             setNote('');
+            setShowForm(false);
             await fetchRecords();
         }
         setSubmitting(false);
@@ -215,6 +213,17 @@ const FinanceManager: React.FC = () => {
         } else {
             setRecords((prev) => prev.filter((r) => r.id !== id));
         }
+    };
+
+    const filtersActive = quickRange !== 'THIS_MONTH' || typeFilter !== 'ALL' || methodFilter !== 'ALL';
+    const resetFilters = () => {
+        clearPersisted('fin.range', 'fin.month', 'fin.start', 'fin.end', 'fin.type', 'fin.method');
+        setQuickRange('THIS_MONTH');
+        setMonthFilter(new Date().toISOString().slice(0, 7));
+        setStartDate('');
+        setEndDate('');
+        setTypeFilter('ALL');
+        setMethodFilter('ALL');
     };
 
     const exportToExcel = () => {
@@ -233,263 +242,158 @@ const FinanceManager: React.FC = () => {
         XLSX.writeFile(wb, `Laporan_Keuangan_Brewasa_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    return (
-        <div className="space-y-4 md:space-y-6">
-            <h2 className="text-xl md:text-2xl font-bold text-brewasa-dark flex items-center gap-2">
-                <Wallet className="w-6 h-6" /> Keuangan
-            </h2>
+    const net = summary.income - summary.expense;
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                    <p className="text-xs text-gray-500">Total Uang Masuk</p>
-                    <p className="text-base md:text-xl font-bold text-green-600">Rp {summary.income.toLocaleString('id-ID')}</p>
+    const RANGES: { id: QuickRange; label: string }[] = [
+        { id: 'THIS_MONTH', label: 'Bulan Ini' },
+        { id: 'LAST_MONTH', label: 'Bulan Lalu' },
+        { id: 'MONTH', label: 'Pilih Bulan' },
+        { id: 'THIS_YEAR', label: 'Tahun Ini' },
+        { id: 'CUSTOM', label: 'Tanggal' },
+        { id: 'ALL', label: 'Semua' },
+    ];
+
+    const segBtn = (active: boolean) =>
+        `px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${active ? 'bg-brewasa-dark text-white border-brewasa-dark' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`;
+
+    const rangeLabel = RANGES.find((r) => r.id === quickRange)?.label ?? '';
+    const activeSummary = [
+        quickRange === 'MONTH' && monthFilter ? monthFilter : rangeLabel,
+        typeFilter !== 'ALL' ? (typeFilter === 'INCOME' ? 'Masuk' : 'Keluar') : null,
+        methodFilter !== 'ALL' ? methodFilter : null,
+    ].filter(Boolean).join(' • ');
+
+    const filterContent = (
+        <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                {RANGES.map((r) => (
+                    <button key={r.id} onClick={() => setQuickRange(r.id)} className={segBtn(quickRange === r.id)}>
+                        {r.label}
+                    </button>
+                ))}
+            </div>
+
+            {quickRange === 'MONTH' && (
+                <input
+                    type="month"
+                    value={monthFilter}
+                    onChange={(e) => setMonthFilter(e.target.value)}
+                    className="w-full sm:w-56 px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                />
+            )}
+            {quickRange === 'CUSTOM' && (
+                <div className="grid grid-cols-2 gap-2 sm:max-w-md">
+                    <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                        aria-label="Tanggal mulai"
+                    />
+                    <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                        aria-label="Tanggal akhir"
+                    />
                 </div>
-                <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                    <p className="text-xs text-gray-500">Total Uang Keluar</p>
-                    <p className="text-base md:text-xl font-bold text-red-600">Rp {summary.expense.toLocaleString('id-ID')}</p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex gap-1">
+                    {([['ALL', 'Semua'], ['INCOME', 'Masuk'], ['EXPENSE', 'Keluar']] as const).map(([id, label]) => (
+                        <button key={id} onClick={() => setTypeFilter(id)} className={segBtn(typeFilter === id)}>
+                            {label}
+                        </button>
+                    ))}
                 </div>
-                <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                    <p className="text-xs text-gray-500">Net Keseluruhan</p>
-                    <p className={`text-base md:text-xl font-bold ${summary.income - summary.expense >= 0 ? 'text-brewasa-dark' : 'text-red-600'}`}>
-                        Rp {(summary.income - summary.expense).toLocaleString('id-ID')}
-                    </p>
+                <div className="inline-flex gap-1">
+                    {([['ALL', 'Cash+QRIS'], ['CASH', 'Cash'], ['QRIS', 'QRIS']] as const).map(([id, label]) => (
+                        <button key={id} onClick={() => setMethodFilter(id)} className={segBtn(methodFilter === id)}>
+                            {label}
+                        </button>
+                    ))}
                 </div>
-                <div className="col-span-2 lg:col-span-1 bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex flex-col justify-center">
-                    <p className="text-xs text-gray-500 mb-1">Net Cash & QRIS</p>
-                    <div className="flex justify-between items-center">
-                        <p className={`text-sm font-bold ${(summary.income_cash - summary.expense_cash) >= 0 ? 'text-brewasa-dark' : 'text-red-600'}`}>
-                            Cash: Rp {(summary.income_cash - summary.expense_cash).toLocaleString('id-ID')}
-                        </p>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <p className={`text-sm font-bold ${(summary.income_qris - summary.expense_qris) >= 0 ? 'text-brewasa-dark' : 'text-red-600'}`}>
-                            QRIS: Rp {(summary.income_qris - summary.expense_qris).toLocaleString('id-ID')}
-                        </p>
-                    </div>
+                {filtersActive && (
+                    <button
+                        onClick={resetFilters}
+                        className="ml-auto inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                    >
+                        <RotateCcw className="w-3.5 h-3.5" /> Reset
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-4 md:space-y-5">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h2 className="text-xl md:text-2xl font-bold text-brewasa-dark flex items-center gap-2">
+                    <Wallet className="w-6 h-6" /> Keuangan
+                </h2>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={exportToExcel}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        title="Export data yang sedang difilter ke Excel"
+                    >
+                        <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export Excel</span><span className="sm:hidden">Export</span>
+                    </button>
+                    <button
+                        onClick={() => setShowForm(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brewasa-dark text-white text-sm font-bold hover:bg-brewasa-copper"
+                    >
+                        <Plus className="w-4 h-4" /> Catat Keuangan
+                    </button>
                 </div>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-3">
-                <form onSubmit={submitRecord} className="bg-white border border-gray-100 rounded-xl p-4 md:p-5 shadow-sm space-y-4 h-fit">
-                    <h3 className="font-bold text-brewasa-dark">Input Keuangan</h3>
+            {/* Filter: di desktop tampil di atas; di mobile lewat tombol Filter melayang di bawah */}
+            <div className="hidden md:block bg-white border border-gray-100 rounded-xl p-3 shadow-sm">{filterContent}</div>
+            <p className="md:hidden text-xs text-gray-500">Filter: <span className="font-semibold text-gray-700">{activeSummary}</span></p>
 
-                    <div>
-                        <label className="text-sm font-medium text-gray-600">Jenis</label>
-                        <div className="grid grid-cols-2 gap-2 mt-1">
-                            <button
-                                type="button"
-                                onClick={() => setType('INCOME')}
-                                className={`py-2 rounded-lg border text-sm font-bold ${type === 'INCOME' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white border-gray-200 text-gray-500'}`}
-                            >
-                                Uang Masuk
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setType('EXPENSE')}
-                                className={`py-2 rounded-lg border text-sm font-bold ${type === 'EXPENSE' ? 'bg-red-50 text-red-700 border-red-300' : 'bg-white border-gray-200 text-gray-500'}`}
-                            >
-                                Uang Keluar
-                            </button>
-                        </div>
-                    </div>
+            {/* Ringkasan */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                    <p className="text-xs text-gray-500">Uang Masuk</p>
+                    <p className="text-base md:text-xl font-bold text-green-600">Rp {summary.income.toLocaleString('id-ID')}</p>
+                </div>
+                <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                    <p className="text-xs text-gray-500">Uang Keluar</p>
+                    <p className="text-base md:text-xl font-bold text-red-600">Rp {summary.expense.toLocaleString('id-ID')}</p>
+                </div>
+                <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                    <p className="text-xs text-gray-500">Selisih (Net)</p>
+                    <p className={`text-base md:text-xl font-bold ${net >= 0 ? 'text-brewasa-dark' : 'text-red-600'}`}>
+                        {net < 0 ? '-' : ''}Rp {Math.abs(net).toLocaleString('id-ID')}
+                    </p>
+                </div>
+                <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm space-y-0.5">
+                    <p className="text-xs text-gray-500">Net per Metode</p>
+                    <p className="text-sm font-bold flex justify-between gap-2">
+                        <span className="text-gray-500 font-medium">Cash</span>
+                        <span className={summary.income_cash - summary.expense_cash >= 0 ? 'text-brewasa-dark' : 'text-red-600'}>
+                            Rp {(summary.income_cash - summary.expense_cash).toLocaleString('id-ID')}
+                        </span>
+                    </p>
+                    <p className="text-sm font-bold flex justify-between gap-2">
+                        <span className="text-gray-500 font-medium">QRIS</span>
+                        <span className={summary.income_qris - summary.expense_qris >= 0 ? 'text-brewasa-dark' : 'text-red-600'}>
+                            Rp {(summary.income_qris - summary.expense_qris).toLocaleString('id-ID')}
+                        </span>
+                    </p>
+                </div>
+            </div>
 
-                    <div>
-                        <label className="text-sm font-medium text-gray-600">Nominal (Rp)</label>
-                        <input
-                            type="number"
-                            min="1"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                            placeholder="Contoh: 50000"
-                            className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="text-sm font-medium text-gray-600">Metode</label>
-                        <select
-                            value={paymentMethod}
-                            onChange={(e) => setPaymentMethod(e.target.value as FinanceMethod)}
-                            className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
-                        >
-                            <option value="CASH">Cash</option>
-                            <option value="QRIS">QRIS</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="text-sm font-medium text-gray-600">Kategori</label>
-                        <input
-                            type="text"
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
-                            placeholder="Contoh: Operasional, Gaji, Penjualan Event"
-                            className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="text-sm font-medium text-gray-600">Tanggal</label>
-                        <input
-                            type="date"
-                            value={transactionDate}
-                            onChange={(e) => setTransactionDate(e.target.value)}
-                            className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="text-sm font-medium text-gray-600">Catatan (Opsional)</label>
-                        <textarea
-                            value={note}
-                            onChange={(e) => setNote(e.target.value)}
-                            rows={3}
-                            className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
-                            placeholder="Catatan transaksi..."
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={submitting}
-                        className="w-full py-2.5 rounded-lg bg-brewasa-dark text-white font-bold hover:bg-brewasa-copper disabled:opacity-50"
-                    >
-                        {submitting ? 'Menyimpan...' : 'Simpan Catatan'}
-                    </button>
-                </form>
-
-                <div className="lg:col-span-2 bg-white border border-gray-100 rounded-xl p-4 md:p-5 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                            <h3 className="font-bold text-brewasa-dark flex items-center gap-2"><Filter className="w-4 h-4" /> Filter Data</h3>
-                            <button
-                                onClick={exportToExcel}
-                                className="hidden md:flex px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors items-center gap-1.5"
-                                title="Export data keuangan yang terfilter ke Excel"
-                            >
-                                <Download className="w-3.5 h-3.5" /> Export Excel
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={exportToExcel}
-                                className="md:hidden inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors"
-                            >
-                                <Download className="w-3.5 h-3.5" /> Export
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setShowMobileFilters((prev) => !prev)}
-                                className="md:hidden inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700"
-                            >
-                                {showMobileFilters ? 'Tutup' : 'Buka'}
-                                <ChevronDown className={`w-4 h-4 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`} />
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className={`${showMobileFilters ? 'block' : 'hidden'} md:block space-y-3`}>
-                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <div>
-                                <label className="text-xs text-gray-500">Quick Range</label>
-                                <select
-                                    value={quickRange}
-                                    onChange={(e) => setQuickRange(e.target.value as QuickRange)}
-                                    className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 text-sm"
-                                >
-                                    <option value="ALL">Semua Tanggal</option>
-                                    <option value="THIS_MONTH">Bulan Ini</option>
-                                    <option value="LAST_MONTH">Bulan Lalu</option>
-                                    <option value="THIS_YEAR">Tahun Ini</option>
-                                    <option value="CUSTOM">Custom Tanggal</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="text-xs text-gray-500">Filter Bulan</label>
-                                <input
-                                    type="month"
-                                    value={monthFilter}
-                                    onChange={(e) => setMonthFilter(e.target.value)}
-                                    className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 text-sm"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs text-gray-500">Jenis</label>
-                                <select
-                                    value={typeFilter}
-                                    onChange={(e) => setTypeFilter(e.target.value as 'ALL' | FinanceType)}
-                                    className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 text-sm"
-                                >
-                                    <option value="ALL">Semua</option>
-                                    <option value="INCOME">Uang Masuk</option>
-                                    <option value="EXPENSE">Uang Keluar</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="text-xs text-gray-500">Metode</label>
-                                <select
-                                    value={methodFilter}
-                                    onChange={(e) => setMethodFilter(e.target.value as 'ALL' | FinanceMethod)}
-                                    className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 text-sm"
-                                >
-                                    <option value="ALL">Semua</option>
-                                    <option value="CASH">Cash</option>
-                                    <option value="QRIS">QRIS</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="text-xs text-gray-500">Tanggal Mulai</label>
-                                <input
-                                    type="date"
-                                    value={startDate}
-                                    onChange={(e) => {
-                                        setQuickRange('CUSTOM');
-                                        setStartDate(e.target.value);
-                                    }}
-                                    className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 text-sm"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs text-gray-500">Tanggal Akhir</label>
-                                <input
-                                    type="date"
-                                    value={endDate}
-                                    onChange={(e) => {
-                                        setQuickRange('CUSTOM');
-                                        setEndDate(e.target.value);
-                                    }}
-                                    className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 text-sm"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setMonthFilter('');
-                                    setQuickRange('ALL');
-                                    setStartDate('');
-                                    setEndDate('');
-                                    setTypeFilter('ALL');
-                                    setMethodFilter('ALL');
-                                }}
-                                className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm hover:bg-gray-50"
-                            >
-                                Reset Semua Filter
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="border border-gray-100 rounded-xl overflow-hidden">
+            {/* Daftar */}
+            <div className="bg-white border border-gray-100 rounded-xl shadow-sm">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-bold text-brewasa-dark">Catatan Keuangan</h3>
+                    <span className="text-xs text-gray-500">{filteredRecords.length} catatan</span>
+                </div>
+                    <div className="rounded-b-xl overflow-hidden">
                         {loading ? (
                             <div className="p-10 text-center flex justify-center"><Loader2 className="animate-spin text-brewasa-copper" /></div>
                         ) : (
@@ -633,8 +537,97 @@ const FinanceManager: React.FC = () => {
                             </>
                         )}
                     </div>
-                </div>
             </div>
+
+            <button
+                onClick={() => setShowFilters(true)}
+                className="md:hidden fixed bottom-5 right-4 z-30 inline-flex items-center gap-2 px-4 py-3 rounded-full bg-brewasa-dark text-white text-sm font-bold shadow-lg"
+            >
+                <SlidersHorizontal className="w-4 h-4" /> Filter{filtersActive ? ' •' : ''}
+            </button>
+
+            {showFilters && (
+                <div className="md:hidden fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => setShowFilters(false)}>
+                    <div className="bg-white w-full rounded-t-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-bold text-lg text-brewasa-dark">Filter</h3>
+                            <button onClick={() => setShowFilters(false)} className="p-1 text-gray-400" aria-label="Tutup"><X className="w-5 h-5" /></button>
+                        </div>
+                        {filterContent}
+                        <button onClick={() => setShowFilters(false)} className="w-full py-3 rounded-lg bg-brewasa-dark text-white font-bold">
+                            Tampilkan {filteredRecords.length} catatan
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Form catat keuangan (modal) */}
+            {showForm && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setShowForm(false)}>
+                    <form
+                        onSubmit={submitRecord}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4 max-h-[92vh] overflow-y-auto"
+                    >
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-bold text-lg text-brewasa-dark">Catat Keuangan</h3>
+                            <button type="button" onClick={() => setShowForm(false)} className="p-1 text-gray-400 hover:text-gray-700" aria-label="Tutup">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => setType('INCOME')}
+                                className={`py-2.5 rounded-lg border text-sm font-bold ${type === 'INCOME' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                Uang Masuk
+                            </button>
+                            <button type="button" onClick={() => setType('EXPENSE')}
+                                className={`py-2.5 rounded-lg border text-sm font-bold ${type === 'EXPENSE' ? 'bg-red-50 text-red-700 border-red-300' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                Uang Keluar
+                            </button>
+                        </div>
+
+                        <div>
+                            <label className="text-sm font-medium text-gray-600">Nominal (Rp)</label>
+                            <input type="number" inputMode="numeric" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
+                                placeholder="Contoh: 50000" className="w-full mt-1 px-3 py-2.5 rounded-lg border border-gray-200" required autoFocus />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-sm font-medium text-gray-600">Metode</label>
+                                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as FinanceMethod)}
+                                    className="w-full mt-1 px-3 py-2.5 rounded-lg border border-gray-200 bg-white">
+                                    <option value="CASH">Cash</option>
+                                    <option value="QRIS">QRIS</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium text-gray-600">Tanggal</label>
+                                <input type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)}
+                                    className="w-full mt-1 px-3 py-2.5 rounded-lg border border-gray-200" required />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-sm font-medium text-gray-600">Kategori</label>
+                            <input type="text" value={category} onChange={(e) => setCategory(e.target.value)}
+                                placeholder="Contoh: Operasional, Gaji, Penjualan Event" className="w-full mt-1 px-3 py-2.5 rounded-lg border border-gray-200" required />
+                        </div>
+
+                        <div>
+                            <label className="text-sm font-medium text-gray-600">Catatan (opsional)</label>
+                            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+                                className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200" placeholder="Catatan transaksi..." />
+                        </div>
+
+                        <button type="submit" disabled={submitting}
+                            className="w-full py-3 rounded-lg bg-brewasa-dark text-white font-bold hover:bg-brewasa-copper disabled:opacity-50">
+                            {submitting ? 'Menyimpan...' : 'Simpan Catatan'}
+                        </button>
+                    </form>
+                </div>
+            )}
         </div>
     );
 };

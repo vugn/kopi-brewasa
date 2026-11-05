@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePersistentState } from '../../utils/usePersistentState';
 import { supabase } from '../../services/supabaseClient';
 import { Search, Filter, Loader2, Calendar, User, ShoppingBag, Clock, CheckCircle, XCircle, AlertCircle, Download, TrendingUp, DollarSign, Trash2, Edit, Plus, Minus, X, CreditCard, Banknote, QrCode, Printer, Package, ChevronDown } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -64,11 +65,11 @@ const getBusinessDate = (dateParam: string | Date, openHour: number) => {
 const TransactionHistory: React.FC<TransactionHistoryProps> = ({ isAdmin }) => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filterStatus, setFilterStatus] = useState('ALL');
-    const [filterPayment, setFilterPayment] = useState('ALL');
-    const [filterVoucher, setFilterVoucher] = useState<'ALL' | 'WITH_VOUCHER' | 'NO_VOUCHER'>('ALL');
-    const [filterConsignment, setFilterConsignment] = useState<'ALL' | 'WITH_CONSIGNMENT' | 'NO_CONSIGNMENT'>('ALL');
-    const [filterDate, setFilterDate] = useState({ start: '', end: '' });
+    const [filterStatus, setFilterStatus] = usePersistentState('th.status', 'ALL');
+    const [filterPayment, setFilterPayment] = usePersistentState('th.payment', 'ALL');
+    const [filterVoucher, setFilterVoucher] = usePersistentState<'ALL' | 'WITH_VOUCHER' | 'NO_VOUCHER'>('th.voucher', 'ALL');
+    const [filterConsignment, setFilterConsignment] = usePersistentState<'ALL' | 'WITH_CONSIGNMENT' | 'NO_CONSIGNMENT'>('th.consignment', 'ALL');
+    const [filterDate, setFilterDate] = usePersistentState('th.date', { start: '', end: '' });
     const [showStatsOnMobile, setShowStatsOnMobile] = useState(false);
     const [showFilterSummaryOnMobile, setShowFilterSummaryOnMobile] = useState(false);
     const [stats, setStats] = useState({

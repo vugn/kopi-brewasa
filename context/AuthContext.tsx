@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 
 export type UserRole = 'admin' | 'karyawan';
@@ -45,8 +45,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loadingProfile, setLoadingProfile] = useState(true);
 
-    const loadProfile = useCallback(async (userId: string, email?: string | null) => {
-        setLoadingProfile(true);
+    // User yang profilnya sudah termuat. Dipakai supaya event auth berulang
+    // (TOKEN_REFRESHED / SIGNED_IN saat tab difokuskan lagi) tidak memicu
+    // layar "Memuat profil..." yang meng-unmount seluruh panel admin.
+    const loadedUserId = useRef<string | null>(null);
+
+    const loadProfile = useCallback(async (userId: string, email?: string | null, opts?: { silent?: boolean }) => {
+        if (!opts?.silent) setLoadingProfile(true);
 
         const { data } = await supabase
             .from('profiles')
@@ -72,11 +77,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
         }
 
+        loadedUserId.current = userId;
         setLoadingProfile(false);
     }, []);
 
     const refreshProfile = useCallback(async () => {
-        if (session?.user?.id) await loadProfile(session.user.id, session.user.email);
+        if (session?.user?.id) await loadProfile(session.user.id, session.user.email, { silent: true });
     }, [session?.user?.id, session?.user?.email, loadProfile]);
 
     useEffect(() => {
@@ -88,6 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (session?.user?.id) {
                 loadProfile(session.user.id, session.user.email);
             } else {
+                loadedUserId.current = null;
                 setProfile(null);
                 setLoadingProfile(false);
             }
@@ -95,10 +102,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
             if (!mounted) return;
-            setSession(nextSession);
-            if (nextSession?.user?.id) {
-                loadProfile(nextSession.user.id, nextSession.user.email);
+            const nextId = nextSession?.user?.id ?? null;
+
+            if (nextId) {
+                // Hanya simpan session baru kalau memang berubah, agar tidak re-render berantai.
+                setSession((prev: any) => (prev?.access_token === nextSession?.access_token ? prev : nextSession));
+                // User yang sama sudah termuat -> refresh token saja, jangan muat ulang profil.
+                if (loadedUserId.current === nextId) return;
+                loadProfile(nextId, nextSession!.user.email);
             } else {
+                loadedUserId.current = null;
+                setSession(null);
                 setProfile(null);
                 setLoadingProfile(false);
             }
@@ -126,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const logout = useCallback(async () => {
         await supabase.auth.signOut();
+        loadedUserId.current = null;
         setProfile(null);
     }, []);
 

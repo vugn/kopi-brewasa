@@ -3,6 +3,7 @@ import { supabase } from '../../services/supabaseClient';
 import QRCode from 'qrcode';
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, Calculator, X, ChevronDown, ChevronUp, Package, QrCode } from 'lucide-react';
 import { MenuItem } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 import PrinterConnection from './PrinterConnection';
 import { bluetoothPrinter } from '../../utils/bluetoothPrinter';
 import { convertQRIS, validateQRIS } from '../../utils/qrisDynamic';
@@ -14,6 +15,7 @@ interface CartItem extends MenuItem {
 }
 
 const PosSystem: React.FC = () => {
+    const { profile } = useAuth();
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -367,7 +369,9 @@ const PosSystem: React.FC = () => {
                     created_at: new Date().toISOString(),
                     notes: orderNotes || null,
                     voucher_discount_type: voucherDiscountType,
-                    voucher_discount_value: discountValueNum
+                    voucher_discount_value: discountValueNum,
+                    created_by: profile?.id ?? null,
+                    created_by_name: profile?.username ?? null
                 }])
                 .select()
                 .single();
