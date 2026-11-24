@@ -7,6 +7,7 @@ import { Trash2, UserPlus, Loader2 } from 'lucide-react';
 interface ProfileRow {
     id: string;
     username: string;
+    full_name: string | null;
     role: UserRole;
     created_at?: string;
 }
@@ -24,6 +25,7 @@ const UserManager: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState('');
     const [role, setRole] = useState<UserRole>('karyawan');
     const [submitting, setSubmitting] = useState(false);
 
@@ -31,7 +33,7 @@ const UserManager: React.FC = () => {
         setLoading(true);
         const { data, error } = await supabase
             .from('profiles')
-            .select('id, username, role, created_at')
+            .select('id, username, full_name, role, created_at')
             .order('created_at', { ascending: false });
         if (error) {
             alert('Gagal memuat user: ' + error.message + '\nPastikan migrasi profiles sudah dijalankan di Supabase SQL Editor.');
@@ -72,11 +74,12 @@ const UserManager: React.FC = () => {
 
             const { error: profileError } = await supabase
                 .from('profiles')
-                .upsert({ id: userId, username: clean, role }, { onConflict: 'id' });
+                .upsert({ id: userId, username: clean, full_name: fullName.trim() || null, role }, { onConflict: 'id' });
             if (profileError) throw profileError;
 
             setUsername('');
             setPassword('');
+            setFullName('');
             setRole('karyawan');
             await fetchUsers();
             alert(`User "${clean}" (${role}) berhasil dibuat. Login pakai username + password itu.`);
@@ -92,6 +95,17 @@ const UserManager: React.FC = () => {
             alert('Gagal update role: ' + error.message);
         } else {
             setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role: newRole } : u)));
+        }
+    };
+
+    const handleNameSave = async (row: ProfileRow, value: string) => {
+        const next = value.trim() || null;
+        if (next === (row.full_name ?? null)) return;
+        const { error } = await supabase.from('profiles').update({ full_name: next }).eq('id', row.id);
+        if (error) {
+            alert('Gagal simpan nama: ' + error.message);
+        } else {
+            setUsers((prev) => prev.map((u) => (u.id === row.id ? { ...u, full_name: next } : u)));
         }
     };
 
@@ -139,6 +153,18 @@ const UserManager: React.FC = () => {
                     </div>
                 </div>
                 <div>
+                    <label className="text-sm font-medium text-gray-600">Nama asli (opsional)</label>
+                    <input
+                        type="text"
+                        value={fullName}
+                        maxLength={100}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder="cth: Budi Santoso"
+                        className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">Hanya terlihat oleh admin, untuk membedakan orangnya.</p>
+                </div>
+                <div>
                     <label className="text-sm font-medium text-gray-600">Role</label>
                     <select
                         value={role}
@@ -168,8 +194,18 @@ const UserManager: React.FC = () => {
                     <div className="divide-y divide-gray-100">
                         {users.map((u) => (
                             <div key={u.id} className="py-3 flex items-center justify-between gap-3 flex-wrap">
-                                <div>
+                                <div className="min-w-0">
                                     <p className="font-bold text-gray-800 text-sm">{u.username}</p>
+                                    <input
+                                        key={`${u.id}:${u.full_name ?? ''}`}
+                                        type="text"
+                                        defaultValue={u.full_name ?? ''}
+                                        maxLength={100}
+                                        placeholder="Nama asli (klik untuk isi)"
+                                        onBlur={(e) => handleNameSave(u, e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                                        className="mt-1 w-full sm:w-56 px-2 py-1 rounded-md border border-transparent hover:border-gray-200 focus:border-gray-300 text-sm text-gray-700 bg-transparent"
+                                    />
                                     <p className="text-[11px] text-gray-400">{u.created_at ? new Date(u.created_at).toLocaleDateString('id-ID') : '-'}</p>
                                 </div>
                                 <div className="flex items-center gap-2">

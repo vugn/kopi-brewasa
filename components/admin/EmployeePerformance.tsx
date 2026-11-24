@@ -105,6 +105,7 @@ const EmployeePerformance: React.FC = () => {
     const [transactions, setTransactions] = useState<RawTransaction[]>([]);
     const [addonIds, setAddonIds] = useState<Set<string>>(new Set());
     const [profileNames, setProfileNames] = useState<Record<string, string>>({});
+    const [fullNames, setFullNames] = useState<Record<string, string>>({}); // username -> nama asli (khusus admin)
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [needsMigration, setNeedsMigration] = useState(false);
@@ -147,9 +148,11 @@ const EmployeePerformance: React.FC = () => {
         }
 
         // Cadangan nama: kalau created_by_name kosong tapi created_by ada, ambil username dari profiles.
-        const profRes = await supabase.from('profiles').select('id, username');
+        const profRes = await supabase.from('profiles').select('id, username, full_name');
         if (!profRes.error) {
-            setProfileNames(Object.fromEntries((profRes.data || []).map((p: any) => [p.id, p.username])));
+            const rows = (profRes.data || []) as any[];
+            setProfileNames(Object.fromEntries(rows.map((p) => [p.id, p.username])));
+            setFullNames(Object.fromEntries(rows.filter((p) => p.full_name).map((p) => [p.username, p.full_name])));
         }
 
         if (!menuRes.error) {
@@ -182,8 +185,10 @@ const EmployeePerformance: React.FC = () => {
     const itemsOf = (t: RawTransaction) => (t.transaction_items || []).reduce((sum, i) => sum + (i.quantity || 0), 0);
 
     const keyOf = (t: RawTransaction) => t.created_by || (t.created_by_name ? `name:${t.created_by_name}` : UNKNOWN_KEY);
-    const nameOf = (t: RawTransaction) =>
-        t.created_by_name || (t.created_by && profileNames[t.created_by]) || UNKNOWN_NAME;
+    const nameOf = (t: RawTransaction) => {
+        const username = t.created_by_name || (t.created_by && profileNames[t.created_by]) || UNKNOWN_NAME;
+        return fullNames[username] ? `${username} (${fullNames[username]})` : username;
+    };
 
     const aggregate = useCallback(
         (start: Date, end: Date): Stats[] => {
@@ -206,7 +211,7 @@ const EmployeePerformance: React.FC = () => {
             }
             return [...map.values()].sort((a, b) => b.cups - a.cups || b.transactions - a.transactions);
         },
-        [transactions, statusOk, cupsOf, openHour, profileNames]
+        [transactions, statusOk, cupsOf, openHour, profileNames, fullNames]
     );
 
     const bounds = useMemo(() => getBounds(period, customStart, customEnd), [period, customStart, customEnd]);
@@ -221,7 +226,7 @@ const EmployeePerformance: React.FC = () => {
         const map = new Map<string, string>();
         transactions.forEach((t) => map.set(keyOf(t), nameOf(t)));
         return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-    }, [transactions, profileNames]);
+    }, [transactions, profileNames, fullNames]);
 
     // Kalau karyawan tersimpan sudah tidak ada di data, balik ke "Semua"
     useEffect(() => {
