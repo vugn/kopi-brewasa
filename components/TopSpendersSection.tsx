@@ -1,14 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Trophy, Medal, Crown, Star, Sparkles, Flame } from 'lucide-react';
-
-interface Transaction {
-    id: string;
-    created_at: string;
-    total_amount: number;
-    customer_name: string;
-    status: string;
-}
 
 interface CustomerStats {
     name: string;
@@ -76,67 +68,40 @@ const RankCard = ({ customer, rank }: { customer: CustomerStats, rank: number })
 };
 
 const TopSpendersSection: React.FC = () => {
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [topSpenders, setTopSpenders] = useState<CustomerStats[]>([]);
     const [loading, setLoading] = useState(true);
     const [timeFilter, setTimeFilter] = useState<'ALL' | 'THIS_MONTH'>('THIS_MONTH');
 
+    // Agregat dihitung di database (top_spenders); pengunjung tidak pernah menerima baris transaksi mentah.
     useEffect(() => {
-        fetchTransactions();
-    }, []);
-
-    const fetchTransactions = async () => {
+        let cancelled = false;
         setLoading(true);
-        const { data, error } = await supabase
-            .from('transactions')
-            .select('id, created_at, total_amount, customer_name, status')
-            .in('status', ['COMPLETED', 'PENDING'])
-            .order('created_at', { ascending: false });
-
-        if (!error && data) {
-            setTransactions(data as Transaction[]);
-        }
-        setLoading(false);
-    };
-
-    const topSpenders = useMemo(() => {
-        const statsMap = new Map<string, CustomerStats>();
-
-        let filteredTransactions = transactions;
-        if (timeFilter === 'THIS_MONTH') {
-            const now = new Date();
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-            filteredTransactions = transactions.filter(t => new Date(t.created_at).getTime() >= startOfMonth);
-        }
-
-        filteredTransactions.forEach(t => {
-            const rawName = t.customer_name?.trim();
-            if (!rawName || rawName.toLowerCase() === 'guest' || rawName.toLowerCase() === 'tanpa nama') return;
-            
-            const nameKey = rawName.toLowerCase();
-
-            if (!statsMap.has(nameKey)) {
-                statsMap.set(nameKey, {
-                    name: rawName,
-                    totalSpent: 0,
-                    visitCount: 0,
-                    lastVisit: t.created_at
-                });
+        supabase.rpc('top_spenders', { p_period: timeFilter }).then(({ data, error }) => {
+            if (cancelled) return;
+            // Awal bulan belum ada data -> tampilkan sepanjang masa, jangan kosong.
+            if (!error && data?.length === 0 && timeFilter === 'THIS_MONTH') {
+                setTimeFilter('ALL');
+                return;
             }
-
-            const stats = statsMap.get(nameKey)!;
-            stats.totalSpent += t.total_amount;
-            stats.visitCount += 1;
+            setTopSpenders(
+                error || !data
+                    ? []
+                    : (data as any[]).map((r) => ({
+                          name: r.name,
+                          totalSpent: Number(r.total_spent),
+                          visitCount: Number(r.visit_count),
+                          lastVisit: r.last_visit,
+                      }))
+            );
+            setLoading(false);
         });
-
-        // Get Top 5
-        return Array.from(statsMap.values())
-            .filter(customer => customer.totalSpent > 0)
-            .sort((a, b) => b.totalSpent - a.totalSpent)
-            .slice(0, 5);
-    }, [transactions, timeFilter]);
+        return () => {
+            cancelled = true;
+        };
+    }, [timeFilter]);
 
     if (loading) return null; // Don't show anything on landing page while loading
-    if (transactions.length === 0) return null;
+    if (topSpenders.length === 0) return null;
 
     return (
         <section className="py-24 bg-gradient-to-b from-white to-[#F7E9D3] overflow-hidden relative">

@@ -491,57 +491,19 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ isAdmin }) => {
         if (!window.confirm('Simpan perubahan item? Total transaksi akan dihitung ulang.')) return;
 
         try {
-            // 1. Calculate new totals
-            const newSubtotal = editItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            const discount = editingTransaction.discount_amount || 0;
-            const newTotal = newSubtotal - discount;
-
-            // 2. Update Transaction Details
-            const { error: updateTransError } = await supabase
-                .from('transactions')
-                .update({
-                    subtotal: newSubtotal,
-                    total_amount: newTotal,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', editingTransaction.id);
-
-            if (updateTransError) throw updateTransError;
-
-            // 3. Sync Items (Simplest: Delete All & Re-insert)
-            // Warning: This changes item IDs, might affect logs if referenced by item_id. 
-            // For this app, logs reference ingredient_id, not transaction_item_id usually.
-            // But let's check `delete_transaction_with_restore`. 
-            // We are NOT deleting the transaction. 
-            // We should delete existing items for this trans ID.
-            const { error: deleteError } = await supabase
-                .from('transaction_items')
-                .delete()
-                .eq('transaction_id', editingTransaction.id);
-
-            if (deleteError) throw deleteError;
-
-            // 4. Insert New Items
-            // We need menu_item_id for each item. 
-            // Existing items from basic fetch might NOT have menu_item_id if we didn't select it.
-            // WE NEED TO UPDATE fetchTransactions TO INCLUDE menu_item_id.
-            // For now, let's assume valid items have it, or we recover it from name (risky).
-            // Let's fix fetchTransactions first in next step if needed. 
-            // Actually, I'll update the fetch query in same step or earlier? 
-            // I haven't updated fetch query yet. I should do that.
-
-            const itemsPayload = editItems.map(item => ({
-                transaction_id: editingTransaction.id,
-                menu_item_id: item.menu_item_id || null, // Allow null if legacy item
-                item_name: item.item_name,
-                quantity: item.quantity,
-                price: item.price,
-                is_consignment: item.is_consignment ?? false,
-                consignment_cost: item.is_consignment ? (item.consignment_cost || 0) : 0
-            }));
-
-            const { error: insertError } = await supabase.from('transaction_items').insert(itemsPayload);
-            if (insertError) throw insertError;
+            // Atomik di database: stok lama dikembalikan, item diganti, total dihitung ulang, stok baru dipotong.
+            const { error } = await supabase.rpc('edit_transaction_items', {
+                p_transaction: editingTransaction.id,
+                p_items: editItems.map(item => ({
+                    menu_item_id: item.menu_item_id || null,
+                    item_name: item.item_name,
+                    quantity: item.quantity,
+                    price: item.price,
+                    is_consignment: item.is_consignment ?? false,
+                    consignment_cost: item.is_consignment ? (item.consignment_cost || 0) : 0
+                }))
+            });
+            if (error) throw error;
 
             alert('Perubahan berhasil disimpan!');
             setIsEditModalOpen(false);

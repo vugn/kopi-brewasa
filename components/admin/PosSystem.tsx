@@ -3,7 +3,6 @@ import { supabase } from '../../services/supabaseClient';
 import QRCode from 'qrcode';
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, Calculator, X, ChevronDown, ChevronUp, Package, QrCode } from 'lucide-react';
 import { MenuItem } from '../../types';
-import { useAuth } from '../../context/AuthContext';
 import PrinterConnection from './PrinterConnection';
 import { bluetoothPrinter } from '../../utils/bluetoothPrinter';
 import { convertQRIS, validateQRIS } from '../../utils/qrisDynamic';
@@ -15,7 +14,6 @@ interface CartItem extends MenuItem {
 }
 
 const PosSystem: React.FC = () => {
-    const { profile } = useAuth();
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -275,63 +273,19 @@ const PosSystem: React.FC = () => {
         setProcessing(true);
 
         try {
-            // Get current bill details to calculate new totals
-            const { data: currentBill, error: fetchError } = await supabase
-                .from('transactions')
-                .select('*')
-                .eq('id', selectedBillId)
-                .single();
-
-            if (fetchError) throw fetchError;
-
-            // Prepare new items
-            const newItemsPayload = cart.map(item => ({
-                transaction_id: selectedBillId,
-                menu_item_id: item.id,
-                quantity: item.quantity,
-                price: parsePrice(item.price),
-                item_name: item.name,
-                is_consignment: item.is_consignment ?? false,
-                consignment_cost: item.consignment_cost ?? 0
-            }));
-
-            // Insert new items
-            const { error: itemsError } = await supabase.from('transaction_items').insert(newItemsPayload);
-            if (itemsError) throw itemsError;
-
-            // Trigger Stock Deduction for new items
-            // We need to call stock deduction manually or let trigger handle it? 
-            // The existing RPC `process_transaction_stock` iterates ALL items. 
-            // If we run it again, it might deduct stock AGAIN for old items?
-            // Let's check `process_transaction_stock` implementation in schema.
-            // It loops through ALL items. BAD. Double deduction risk if not careful.
-            // BUT, `process_transaction_stock` relies on `transaction_items`.
-            // Ideally we should only process NEW items.
-            // Quick fix: The RPC logs movements. Maybe we can't easily use the RPC safely without modification.
-            // Or we update the RPC to be smarter? 
-            // For now, let's assume we need to handle stock deduction for NEW items specifically.
-            // Actually, let's just create a new helper or accept that for now we might skip stock deduction to avoid double counting 
-            // UNTIL we fix the RPC. 
-            // Wait, if I use the existing RPC, it will deduct EVERYTHING again.
-            // I should implement a "process_new_items_stock" or just do it client side (not ideal) or trust the user to manually adjust if needed?
-            // No, accurate stock is important.
-            // Let's assume for this iteration we focus on the TRANSACTION aggregation. Stock fix later.
-
-            // Update Transaction Totals
-            const newSubtotal = (currentBill.subtotal || 0) + totalAmount;
-            // Recalculate discount if needed? For now keep simpler.
-            const newTotal = (currentBill.total_amount || 0) + totalAmount; // Assuming simple addition
-
-            const { error: updateError } = await supabase
-                .from('transactions')
-                .update({
-                    subtotal: newSubtotal,
-                    total_amount: newTotal,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', selectedBillId);
-
-            if (updateError) throw updateError;
+            // Atomik: item baru + total bill + potong stok hanya untuk item baru.
+            const { error: billError } = await supabase.rpc('add_items_to_bill', {
+                p_transaction: selectedBillId,
+                p_items: cart.map(item => ({
+                    menu_item_id: item.id,
+                    quantity: item.quantity,
+                    price: parsePrice(item.price),
+                    item_name: item.name,
+                    is_consignment: item.is_consignment ?? false,
+                    consignment_cost: item.consignment_cost ?? 0
+                }))
+            });
+            if (billError) throw billError;
 
             alert('Berhasil menambahkan item ke Bill!');
             setCart([]);
@@ -354,46 +308,30 @@ const PosSystem: React.FC = () => {
         setProcessing(true);
 
         try {
-            const { data: trans, error: transError } = await supabase
-                .from('transactions')
-                .insert([{
-                    total_amount: finalTotal,
-                    subtotal: totalAmount,
-                    discount_amount: discountNum,
+            // Satu panggilan atomik: transaksi + item + potong stok (gagal = batal semua).
+            const { error: saleError } = await supabase.rpc('create_sale', {
+                p_sale: {
                     payment_method: paymentMethod,
                     order_type: orderType,
                     status: 'PENDING',
                     customer_name: customerName,
+                    discount_amount: discountNum,
                     voucher_code: voucherCode || null,
                     voucher_notes: voucherNotes || null,
-                    created_at: new Date().toISOString(),
                     notes: orderNotes || null,
                     voucher_discount_type: voucherDiscountType,
-                    voucher_discount_value: discountValueNum,
-                    created_by: profile?.id ?? null,
-                    created_by_name: profile?.username ?? null
-                }])
-                .select()
-                .single();
-
-            if (transError) throw transError;
-
-            const itemsPayload = cart.map(item => ({
-                transaction_id: trans.id,
-                menu_item_id: item.id,
-                quantity: item.quantity,
-                price: parsePrice(item.price),
-                item_name: item.name,
-                is_consignment: item.is_consignment ?? false,
-                consignment_cost: item.consignment_cost ?? 0
-            }));
-
-            const { error: itemsError } = await supabase.from('transaction_items').insert(itemsPayload);
-            if (itemsError) throw itemsError;
-
-            // Trigger Stock Deduction
-            const { error: stockError } = await supabase.rpc('process_transaction_stock', { transaction_uuid: trans.id });
-            if (stockError) console.error("Stock deduction failed:", stockError); // Don't block UI, just log
+                    voucher_discount_value: discountValueNum
+                },
+                p_items: cart.map(item => ({
+                    menu_item_id: item.id,
+                    quantity: item.quantity,
+                    price: parsePrice(item.price),
+                    item_name: item.name,
+                    is_consignment: item.is_consignment ?? false,
+                    consignment_cost: item.consignment_cost ?? 0
+                }))
+            });
+            if (saleError) throw saleError;
 
             alert('Transaksi Berhasil!');
             setCart([]);
