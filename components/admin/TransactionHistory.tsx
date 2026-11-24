@@ -111,7 +111,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ isAdmin }) => {
     // Business Hours State
     const [openingHour, setOpeningHour] = useState(() => {
         const saved = localStorage.getItem('kopi-brewasa.openingHour');
-        return saved ? parseInt(saved, 10) : 16; // default 16:00
+        return saved ? parseInt(saved, 10) : 7; // default 07:00 (hari kerja mulai jam 7)
     });
 
     useEffect(() => {

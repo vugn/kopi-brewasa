@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Coffee, Loader2, Receipt, RefreshCw, Trophy, Users, Wallet } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 import { usePersistentState } from '../../utils/usePersistentState';
-import { dayKey, dayStartISO, formatDay, monthStartKey, shiftDay, todayKey, weekStartKey } from '../../utils/wibDate';
+import { dayKey, dayStartISO, formatDay, monthStartKey, shiftDay, todayKey, weekStartKey } from '../../utils/bizDay';
 
 type Period = 'TODAY' | 'YESTERDAY' | 'WEEK' | 'MONTH' | 'CUSTOM';
 type StatusMode = 'VALID' | 'COMPLETED' | 'ALL';
@@ -427,7 +427,7 @@ const EmployeePerformance: React.FC = () => {
                         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
                             <div>
                                 <h3 className="font-bold text-brewasa-dark">Hari Kerja & Gaji</h3>
-                                <p className="text-xs text-gray-500">Hari masuk = hari ada minimal satu transaksi yang dibuat orang itu. Gaji = hari masuk × tarif per hari.</p>
+                                <p className="text-xs text-gray-500">Hari masuk = hari ada minimal satu transaksi yang dibuat orang itu (hari mulai jam 07:00 WITA). Gaji = hari masuk × tarif per hari.</p>
                             </div>
                             <p className="text-sm font-bold text-brewasa-dark">Total {rupiah(payrollTotal)}</p>
                         </div>

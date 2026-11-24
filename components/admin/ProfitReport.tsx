@@ -2,9 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Info, Loader2, TrendingUp } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 import { usePersistentState } from '../../utils/usePersistentState';
-import { dayKey } from '../../utils/wibDate';
+import { dayKey, dayStartISO, todayKey } from '../../utils/bizDay';
 
-const TZ_OFFSET_MS = 7 * 60 * 60 * 1000; // WIB
 const MONTHS_BACK = 6;
 
 interface MonthStats {
@@ -23,15 +22,14 @@ interface MonthStats {
 const rupiah = (n: number) => (n < 0 ? '-Rp ' : 'Rp ') + Math.abs(Math.round(n)).toLocaleString('id-ID');
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
 
-const monthKeyOf = (iso: string) => new Date(new Date(iso).getTime() + TZ_OFFSET_MS).toISOString().slice(0, 7);
-const jakartaNow = () => new Date(Date.now() + TZ_OFFSET_MS);
-const currentMonthKey = () => jakartaNow().toISOString().slice(0, 7);
+const monthKeyOf = (iso: string) => dayKey(iso).slice(0, 7);
+const currentMonthKey = () => todayKey().slice(0, 7);
 const shiftMonth = (key: string, delta: number) => {
     const [y, m] = key.split('-').map(Number);
     const d = new Date(Date.UTC(y, m - 1 + delta, 1));
     return d.toISOString().slice(0, 7);
 };
-const monthStartISO = (key: string) => new Date(`${key}-01T00:00:00+07:00`).toISOString();
+const monthStartISO = (key: string) => dayStartISO(`${key}-01`);
 const monthLabel = (key: string) => {
     const [y, m] = key.split('-').map(Number);
     return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('id-ID', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -180,7 +178,7 @@ const ProfitReport: React.FC = () => {
     const fixedGaji = karyawan * gajiPer;
     const isCurrentMonth = selected === nowKey;
     const dim = daysInMonth(selected);
-    const elapsed = isCurrentMonth ? Math.min(dim, jakartaNow().getUTCDate()) : dim;
+    const elapsed = isCurrentMonth ? Math.min(dim, Number(todayKey().slice(8, 10))) : dim;
 
     // Satu fungsi untuk semua skenario: omzet & item boleh diproyeksikan, biaya tetap penuh sebulan.
     const calc = useCallback(
