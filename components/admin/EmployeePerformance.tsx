@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Coffee, Loader2, Receipt, RefreshCw, Trophy, Users, Wallet } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 import { usePersistentState } from '../../utils/usePersistentState';
+import { dayKey, dayStartISO, formatDay, monthStartKey, shiftDay, todayKey, weekStartKey } from '../../utils/wibDate';
 
 type Period = 'TODAY' | 'YESTERDAY' | 'WEEK' | 'MONTH' | 'CUSTOM';
 type StatusMode = 'VALID' | 'COMPLETED' | 'ALL';
@@ -44,55 +45,18 @@ const PERIODS: { id: Period; label: string }[] = [
 ];
 
 const rupiah = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
-const pad = (n: number) => String(n).padStart(2, '0');
-const toInputDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const fromInputDate = (s: string) => {
-    const [y, m, d] = s.split('-').map(Number);
-    return new Date(y, m - 1, d);
-};
-
-// Sama dengan Riwayat Transaksi: transaksi sebelum jam buka dihitung sebagai hari sebelumnya.
-const businessDay = (value: string | Date, openHour: number) => {
-    const d = new Date(value);
-    if (d.getHours() < openHour) d.setDate(d.getDate() - 1);
-    d.setHours(0, 0, 0, 0);
-    return d;
-};
-
-const readOpeningHour = () => {
-    try {
-        const saved = localStorage.getItem('kopi-brewasa.openingHour');
-        const n = saved ? parseInt(saved, 10) : 16;
-        return Number.isFinite(n) ? n : 16;
-    } catch {
-        return 16;
-    }
-};
-
 const getBounds = (period: Period, customStart: string, customEnd: string) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    // "today" sebenarnya hari bisnis saat ini
-    const openHour = readOpeningHour();
-    const biz = businessDay(new Date(), openHour);
-
-    if (period === 'TODAY') return { start: biz, end: biz };
+    const today = todayKey();
+    if (period === 'TODAY') return { start: today, end: today };
     if (period === 'YESTERDAY') {
-        const y = new Date(biz);
-        y.setDate(y.getDate() - 1);
+        const y = shiftDay(today, -1);
         return { start: y, end: y };
     }
-    if (period === 'WEEK') {
-        const s = new Date(biz);
-        s.setDate(s.getDate() - s.getDay());
-        return { start: s, end: biz };
-    }
-    if (period === 'MONTH') {
-        return { start: new Date(biz.getFullYear(), biz.getMonth(), 1), end: biz };
-    }
-    const s = customStart ? fromInputDate(customStart) : biz;
-    const e = customEnd ? fromInputDate(customEnd) : s;
-    return s <= e ? { start: s, end: e } : { start: e, end: s };
+    if (period === 'WEEK') return { start: weekStartKey(today), end: today };
+    if (period === 'MONTH') return { start: monthStartKey(today), end: today };
+    const st = customStart || today;
+    const en = customEnd || st;
+    return st <= en ? { start: st, end: en } : { start: en, end: st };
 };
 
 const EmployeePerformance: React.FC = () => {
@@ -106,11 +70,10 @@ const EmployeePerformance: React.FC = () => {
     const [addonIds, setAddonIds] = useState<Set<string>>(new Set());
     const [profileNames, setProfileNames] = useState<Record<string, string>>({});
     const [fullNames, setFullNames] = useState<Record<string, string>>({}); // username -> nama asli (khusus admin)
+    const [staff, setStaff] = useState<Record<string, { username: string; role: string; wage: number }>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [needsMigration, setNeedsMigration] = useState(false);
-
-    const openHour = readOpeningHour();
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -119,19 +82,16 @@ const EmployeePerformance: React.FC = () => {
 
         // Ambil dari awal bulan ini (untuk tabel perbandingan) atau awal rentang pilihan, mana yang lebih awal.
         const sel = getBounds(period, customStart, customEnd);
-        const biz = businessDay(new Date(), openHour);
-        const monthStart = new Date(biz.getFullYear(), biz.getMonth(), 1);
-        const from = new Date(Math.min(sel.start.getTime(), monthStart.getTime()));
-        from.setDate(from.getDate() - 1);
-        const to = new Date(Math.max(sel.end.getTime(), biz.getTime()));
-        to.setDate(to.getDate() + 2);
+        const today = todayKey();
+        const from = [sel.start, monthStartKey(today)].sort()[0];
+        const to = [sel.end, today].sort().slice(-1)[0];
 
         const [trxRes, menuRes] = await Promise.all([
             supabase
                 .from('transactions')
                 .select('id, created_at, total_amount, status, created_by, created_by_name, transaction_items ( quantity, menu_item_id, item_name )')
-                .gte('created_at', from.toISOString())
-                .lt('created_at', to.toISOString())
+                .gte('created_at', dayStartISO(shiftDay(from, -1)))
+                .lt('created_at', dayStartISO(shiftDay(to, 2)))
                 .order('created_at', { ascending: false }),
             supabase.from('menu_items').select('id, category'),
         ]);
@@ -148,9 +108,10 @@ const EmployeePerformance: React.FC = () => {
         }
 
         // Cadangan nama: kalau created_by_name kosong tapi created_by ada, ambil username dari profiles.
-        const profRes = await supabase.from('profiles').select('id, username, full_name');
+        const profRes = await supabase.from('profiles').select('id, username, full_name, role, daily_wage');
         if (!profRes.error) {
             const rows = (profRes.data || []) as any[];
+            setStaff(Object.fromEntries(rows.map((p) => [p.id, { username: p.username, role: p.role, wage: Number(p.daily_wage) || 0 }])));
             setProfileNames(Object.fromEntries(rows.map((p) => [p.id, p.username])));
             setFullNames(Object.fromEntries(rows.filter((p) => p.full_name).map((p) => [p.username, p.full_name])));
         }
@@ -159,7 +120,7 @@ const EmployeePerformance: React.FC = () => {
             setAddonIds(new Set((menuRes.data || []).filter((m: any) => m.category === 'ADDON').map((m: any) => m.id)));
         }
         setLoading(false);
-    }, [period, customStart, customEnd, openHour]);
+    }, [period, customStart, customEnd]);
 
     useEffect(() => {
         load();
@@ -191,11 +152,11 @@ const EmployeePerformance: React.FC = () => {
     };
 
     const aggregate = useCallback(
-        (start: Date, end: Date): Stats[] => {
+        (start: string, end: string): Stats[] => {
             const map = new Map<string, Stats>();
             for (const t of transactions) {
                 if (!statusOk(t.status)) continue;
-                const day = businessDay(t.created_at, openHour);
+                const day = dayKey(t.created_at);
                 if (day < start || day > end) continue;
 
                 const key = keyOf(t);
@@ -211,7 +172,7 @@ const EmployeePerformance: React.FC = () => {
             }
             return [...map.values()].sort((a, b) => b.cups - a.cups || b.transactions - a.transactions);
         },
-        [transactions, statusOk, cupsOf, openHour, profileNames, fullNames]
+        [transactions, statusOk, cupsOf, profileNames, fullNames]
     );
 
     const bounds = useMemo(() => getBounds(period, customStart, customEnd), [period, customStart, customEnd]);
@@ -275,9 +236,8 @@ const EmployeePerformance: React.FC = () => {
         const perMenu = new Map<string, number>();
         for (const t of transactions) {
             if (!statusOk(t.status) || keyOf(t) !== employee) continue;
-            const day = businessDay(t.created_at, openHour);
-            if (day < bounds.start || day > bounds.end) continue;
-            const k = toInputDate(day);
+            const k = dayKey(t.created_at);
+            if (k < bounds.start || k > bounds.end) continue;
             const row = perDay.get(k) || { cups: 0, transactions: 0, revenue: 0 };
             row.cups += cupsOf(t);
             row.transactions += 1;
@@ -292,15 +252,49 @@ const EmployeePerformance: React.FC = () => {
             days: [...perDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)),
             menus: [...perMenu.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8),
         };
-    }, [employee, transactions, statusOk, bounds, cupsOf, openHour, addonIds]);
+    }, [employee, transactions, statusOk, bounds, cupsOf, addonIds]);
 
     const topCups = Math.max(1, ...stats.map((s) => s.cups));
     const unknownCount = allStats.find((s) => s.key === UNKNOWN_KEY)?.transactions || 0;
 
     const rangeLabel = (() => {
-        const f = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-        return bounds.start.getTime() === bounds.end.getTime() ? f(bounds.start) : `${f(bounds.start)} – ${f(bounds.end)}`;
+        const f = (k: string) => formatDay(k, { day: 'numeric', month: 'short', year: 'numeric' });
+        return bounds.start === bounds.end ? f(bounds.start) : `${f(bounds.start)} – ${f(bounds.end)}`;
     })();
+
+    // Hari kerja = hari ada minimal satu transaksi (status apa pun) yang dibuat orang itu. Gaji = hari kerja × tarif.
+    const payroll = useMemo(() => {
+        const rows = new Map<string, { key: string; name: string; wage: number; days: Set<string> }>();
+        const ensure = (id: string) => {
+            const info = staff[id];
+            const username = info?.username || profileNames[id] || id.slice(0, 6);
+            const label = fullNames[username] ? `${username} (${fullNames[username]})` : username;
+            const row = rows.get(id) || { key: id, name: label, wage: info?.wage || 0, days: new Set<string>() };
+            rows.set(id, row);
+            return row;
+        };
+        Object.entries(staff).forEach(([id, p]) => p.role === 'karyawan' && ensure(id));
+        for (const t of transactions) {
+            if (!t.created_by) continue;
+            const day = dayKey(t.created_at);
+            if (day < bounds.start || day > bounds.end) continue;
+            ensure(t.created_by).days.add(day);
+        }
+        return [...rows.values()]
+            .filter((r) => employee === 'ALL' || r.key === employee)
+            .map((r) => ({ ...r, dayList: [...r.days].sort(), count: r.days.size, pay: r.days.size * r.wage }))
+            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    }, [staff, transactions, bounds, employee, profileNames, fullNames]);
+    const payrollTotal = payroll.reduce((sum, r) => sum + r.pay, 0);
+    const [openPayroll, setOpenPayroll] = useState<string | null>(null);
+
+    const saveWage = async (id: string, value: string) => {
+        const wage = Math.min(1000000, Math.max(0, parseInt(value.replace(/\D/g, ''), 10) || 0));
+        if (wage === (staff[id]?.wage ?? 0)) return;
+        const { error: err } = await supabase.from('profiles').update({ daily_wage: wage }).eq('id', id);
+        if (err) alert('Gagal simpan tarif: ' + err.message);
+        else setStaff((prev) => ({ ...prev, [id]: { ...prev[id], wage } }));
+    };
 
     return (
         <div className="space-y-5">
@@ -428,6 +422,67 @@ const EmployeePerformance: React.FC = () => {
                         </p>
                     )}
 
+                    {/* Hari kerja & gaji */}
+                    <section className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                            <div>
+                                <h3 className="font-bold text-brewasa-dark">Hari Kerja & Gaji</h3>
+                                <p className="text-xs text-gray-500">Hari masuk = hari ada minimal satu transaksi yang dibuat orang itu. Gaji = hari masuk × tarif per hari.</p>
+                            </div>
+                            <p className="text-sm font-bold text-brewasa-dark">Total {rupiah(payrollTotal)}</p>
+                        </div>
+                        {payroll.length === 0 ? (
+                            <p className="p-6 text-center text-sm text-gray-400">Belum ada karyawan.</p>
+                        ) : (
+                            <ul className="divide-y divide-gray-100">
+                                {payroll.map((r) => (
+                                    <li key={r.key} className="p-4">
+                                        <div className="flex items-center gap-3 flex-wrap">
+                                            <button
+                                                onClick={() => setOpenPayroll(openPayroll === r.key ? null : r.key)}
+                                                className="min-w-0 flex-1 text-left"
+                                                aria-expanded={openPayroll === r.key}
+                                            >
+                                                <p className="font-semibold text-gray-900 truncate">{r.name}</p>
+                                                <p className="text-xs text-gray-500">{r.count} hari masuk • ketuk untuk lihat tanggal</p>
+                                            </button>
+                                            <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                                                Tarif/hari Rp
+                                                <input
+                                                    key={`${r.key}:${r.wage}`}
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    defaultValue={r.wage ? r.wage.toLocaleString('id-ID') : ''}
+                                                    placeholder="0"
+                                                    onBlur={(e) => saveWage(r.key, e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                                                    className="w-24 px-2 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-800 text-right"
+                                                />
+                                            </label>
+                                            <p className="w-28 text-right font-bold text-brewasa-dark tabular-nums">{rupiah(r.pay)}</p>
+                                        </div>
+                                        {openPayroll === r.key && (
+                                            <div className="mt-3 flex flex-wrap gap-1.5">
+                                                {r.dayList.length === 0 && <span className="text-xs text-gray-400">Belum ada hari masuk di periode ini.</span>}
+                                                {r.dayList.map((d) => (
+                                                    <span key={d} className="px-2 py-1 rounded-md bg-gray-100 text-xs text-gray-700">
+                                                        {formatDay(d, { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {r.wage === 0 && <p className="mt-2 text-xs text-amber-700">Tarif belum diisi, gaji dihitung Rp0.</p>}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        {unknownCount > 0 && (
+                            <p className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100">
+                                Transaksi lama tanpa data kasir tidak bisa dihitung sebagai hari masuk siapa pun.
+                            </p>
+                        )}
+                    </section>
+
                     {/* Leaderboard */}
                     <section className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
                         <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
@@ -540,7 +595,7 @@ const EmployeePerformance: React.FC = () => {
                                         {detail.days.map(([day, v]) => (
                                             <tr key={day}>
                                                 <td className="p-3 text-gray-700">
-                                                    {fromInputDate(day).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                    {formatDay(day, { weekday: 'short', day: 'numeric', month: 'short' })}
                                                 </td>
                                                 <td className="p-3 text-right tabular-nums font-semibold">{v.cups} cup</td>
                                                 <td className="p-3 text-right text-gray-500 tabular-nums">{v.transactions} trx</td>
