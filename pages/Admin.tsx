@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
     Activity, Calculator, Crown, Download, LogOut, Lock, Megaphone, Menu, MessageSquare, Package,
-    Receipt, ShoppingCart, StickyNote, UserCog, UtensilsCrossed, Wallet, X,
+    Receipt, ShoppingCart, StickyNote, TrendingUp, UserCog, UtensilsCrossed, Wallet, X,
 } from 'lucide-react';
 import { usePersistentState } from '../utils/usePersistentState';
 import EmployeePerformance from '../components/admin/EmployeePerformance';
+import ProfitReport from '../components/admin/ProfitReport';
 import MenuManager from '../components/admin/MenuManager';
 import StoryModerator from '../components/admin/StoryModerator';
 import AnnouncementManager from '../components/admin/AnnouncementManager';
@@ -43,6 +44,7 @@ const TAB_GROUPS: TabGroup[] = [
         title: 'Laporan',
         tabs: [
             { id: 'finance', label: 'Keuangan', icon: Wallet, roles: ['admin'] },
+            { id: 'profit', label: 'Laporan Laba', icon: TrendingUp, roles: ['admin'] },
             { id: 'performance', label: 'Kinerja Karyawan', icon: Activity, roles: ['admin'] },
             { id: 'top-spenders', label: 'Pelanggan Setia', icon: Crown, roles: ['admin'] },
             { id: 'exports', label: 'Export Data', icon: Download, roles: ['admin'] },
@@ -150,7 +152,14 @@ const AdminInner: React.FC = () => {
     if (!profile || !role) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <p className="text-brewasa-dark font-medium">{loadingProfile ? 'Memuat profil...' : 'Profil tidak ditemukan.'}</p>
+                {loadingProfile ? (
+                    <p className="text-brewasa-dark font-medium">Memuat profil...</p>
+                ) : (
+                    <div className="text-center space-y-3 p-6">
+                        <p className="text-brewasa-dark font-medium">Akun ini belum terdaftar sebagai staf. Minta admin menambahkannya.</p>
+                        <button onClick={logout} className="px-4 py-2 rounded-lg border border-gray-300 text-sm">Keluar</button>
+                    </div>
+                )}
             </div>
         );
     }
@@ -254,6 +263,7 @@ const AdminInner: React.FC = () => {
                     {safeTab === 'pos' && <PosSystem />}
                     {safeTab === 'history' && <TransactionHistory isAdmin={isAdmin} />}
                     {safeTab === 'finance' && <FinanceManager />}
+                    {safeTab === 'profit' && <ProfitReport />}
                     {safeTab === 'performance' && <EmployeePerformance />}
                     {safeTab === 'menu' && <MenuManager />}
                     {safeTab === 'stories' && <StoryModerator />}

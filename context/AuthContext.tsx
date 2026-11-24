@@ -50,7 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // layar "Memuat profil..." yang meng-unmount seluruh panel admin.
     const loadedUserId = useRef<string | null>(null);
 
-    const loadProfile = useCallback(async (userId: string, email?: string | null, opts?: { silent?: boolean }) => {
+    const loadProfile = useCallback(async (userId: string, _email?: string | null, opts?: { silent?: boolean }) => {
         if (!opts?.silent) setLoadingProfile(true);
 
         const { data } = await supabase
@@ -67,14 +67,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 created_at: data.created_at,
             });
         } else {
-            // Fallback kalau tabel profiles belum ada / row belum dibuat.
-            // Akun email asli (legacy) => admin. Sisanya role paling aman.
-            const isLegacyAdmin = !!email && !email.endsWith(`@${KARYAWAN_EMAIL_DOMAIN}`);
-            setProfile({
-                id: userId,
-                username: emailToUsername(email) || 'unknown',
-                role: isLegacyAdmin ? 'admin' : 'karyawan',
-            });
+            // Tanpa baris profiles = bukan staf. Jangan beri peran apa pun dari sisi klien.
+            setProfile(null);
         }
 
         loadedUserId.current = userId;

@@ -178,9 +178,10 @@ const MenuManager: React.FC = () => {
     };
 
     const uploadImage = async (file: File) => {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[file.type];
+        if (!ext) throw new Error('Format gambar harus JPG, PNG, WEBP, atau GIF.');
+        if (file.size > 2 * 1024 * 1024) throw new Error('Ukuran gambar maksimal 2 MB.');
+        const filePath = `${crypto.randomUUID()}.${ext}`;
 
         const { error: uploadError } = await supabase.storage
             .from('menu-images')
