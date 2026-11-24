@@ -3,6 +3,8 @@ import { ChevronDown, Info, Loader2, TrendingUp } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 import { usePersistentState } from '../../utils/usePersistentState';
 import { dayKey, dayStartISO, todayKey } from '../../utils/bizDay';
+import { DEFAULT_MITRA, DEFAULT_OWNERS, mitraShares, splitOwners, type Mitra, type Owner } from '../../utils/profitShare';
+import ProfitShareSettings from './ProfitShareSettings';
 
 const MONTHS_BACK = 6;
 
@@ -97,9 +99,11 @@ const ProfitReport: React.FC = () => {
     const [aset, setAset] = usePersistentState('lp.aset', 200000);
     const [lain, setLain] = usePersistentState('lp.lain', 0);
     const [cadanganPct, setCadanganPct] = usePersistentState('lp.cadangan', 10);
-    const [partners, setPartners] = usePersistentState('lp.partners', 2);
     const [showSettings, setShowSettings] = useState(false);
 
+    const [mitras, setMitras] = useState<Mitra[]>(DEFAULT_MITRA);
+    const [owners, setOwners] = useState<Owner[]>(DEFAULT_OWNERS);
+    const [usingDefaults, setUsingDefaults] = useState(false);
     const [stats, setStats] = useState<Record<string, MonthStats>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -174,6 +178,27 @@ const ProfitReport: React.FC = () => {
         load();
     }, [load]);
 
+    // Pengaturan mitra & porsi pemilik dari database; kalau tabel belum ada pakai nilai bawaan.
+    const loadSettings = useCallback(async () => {
+        const [m, o] = await Promise.all([
+            supabase.from('location_partners').select('*').order('start_date', { ascending: true }),
+            supabase.from('owner_shares').select('*').order('sort_order', { ascending: true }),
+        ]);
+        if (m.error || o.error) {
+            setMitras(DEFAULT_MITRA);
+            setOwners(DEFAULT_OWNERS);
+            setUsingDefaults(true);
+            return;
+        }
+        setUsingDefaults(false);
+        setMitras((m.data || []).map((r: any) => ({ ...r, percent: Number(r.percent), min_monthly: Number(r.min_monthly) })) as Mitra[]);
+        setOwners((o.data || []).map((r: any) => ({ ...r, share_pct: Number(r.share_pct) })) as Owner[]);
+    }, []);
+
+    useEffect(() => {
+        loadSettings();
+    }, [loadSettings]);
+
     const cur = stats[selected];
     const fixedGaji = karyawan * gajiPer;
     const isCurrentMonth = selected === nowKey;
@@ -181,23 +206,29 @@ const ProfitReport: React.FC = () => {
     const elapsed = isCurrentMonth ? Math.min(dim, Number(todayKey().slice(8, 10))) : dim;
 
     // Satu fungsi untuk semua skenario: omzet & item boleh diproyeksikan, biaya tetap penuh sebulan.
+    // Dasar mitra = omzet - bahan - gaji - biaya lain (aset/penyusutan ditahan dari bagian pemilik, bukan dari mitra).
     const calc = useCallback(
-        (omzet: number, items: number, hppRatio: number, gaji: number) => {
+        (omzet: number, items: number, hppRatio: number, gaji: number, month: string, minScale = 1) => {
             const hpp = omzet * hppRatio;
             const labaKotor = omzet - hpp;
-            const labaOperasi = labaKotor - gaji - aset - lain;
-            const cadangan = Math.max(0, labaOperasi) * (cadanganPct / 100);
-            const dibagi = Math.max(0, labaOperasi - cadangan);
-            return { omzet, items, hpp, labaKotor, labaOperasi, cadangan, dibagi, perPartner: dibagi / Math.max(1, partners) };
+            const labaUsaha = labaKotor - gaji - lain;
+            const mitra = mitraShares(mitras, month, { laba: labaUsaha, omzet }, minScale);
+            const mitraTotal = mitra.reduce((sum, x) => sum + x.amount, 0);
+            const labaOperasi = labaUsaha - aset; // laba bersih sebelum mitra
+            const sisaPemilik = labaUsaha - mitraTotal - aset;
+            const cadangan = Math.max(0, sisaPemilik) * (cadanganPct / 100);
+            const dibagi = Math.max(0, sisaPemilik - cadangan);
+            const ownerShares = splitOwners(dibagi, owners);
+            return { omzet, items, hpp, labaKotor, labaUsaha, labaOperasi, mitra, mitraTotal, sisaPemilik, cadangan, dibagi, ownerShares };
         },
-        [aset, lain, cadanganPct, partners]
+        [aset, lain, cadanganPct, mitras, owners]
     );
 
     const report = useMemo(() => {
         if (!cur || cur.omzet <= 0) return null;
         const hppRatio = cur.hpp / cur.omzet;
         const gajiA = cur.gajiNyata ? cur.gaji : fixedGaji;
-        const actual = calc(cur.omzet, cur.items, hppRatio, gajiA);
+        const actual = calc(cur.omzet, cur.items, hppRatio, gajiA, selected, isCurrentMonth ? elapsed / dim : 1);
         let forecast: null | { base: ReturnType<typeof calc>; low: ReturnType<typeof calc>; price: ReturnType<typeof calc> } = null;
         if (isCurrentMonth && elapsed < dim && elapsed > 0) {
             const factor = dim / elapsed;
@@ -206,23 +237,27 @@ const ProfitReport: React.FC = () => {
             // Naik Rp1.000/item: tambahan omzet murni jadi laba kotor (HPP tidak berubah).
             // Gaji harian ikut bergerak dengan hari masuk; kalau tarif belum diisi, pakai gaji tetap penuh.
             const gajiP = cur.gajiNyata ? cur.gaji * factor : fixedGaji;
-            const price = calc(omzetP + itemsP * 1000, itemsP, (omzetP * hppRatio) / (omzetP + itemsP * 1000), gajiP);
+            const price = calc(omzetP + itemsP * 1000, itemsP, (omzetP * hppRatio) / (omzetP + itemsP * 1000), gajiP, selected);
             forecast = {
-                base: calc(omzetP, itemsP, hppRatio, gajiP),
-                low: calc(omzetP * 0.9, itemsP * 0.9, hppRatio, cur.gajiNyata ? gajiP * 0.9 : gajiP),
+                base: calc(omzetP, itemsP, hppRatio, gajiP, selected),
+                low: calc(omzetP * 0.9, itemsP * 0.9, hppRatio, cur.gajiNyata ? gajiP * 0.9 : gajiP, selected),
                 price,
             };
         }
         return { hppRatio, actual, forecast };
-    }, [cur, calc, isCurrentMonth, elapsed, dim]);
+    }, [cur, calc, isCurrentMonth, elapsed, dim, selected]);
 
     const trend = useMemo(
         () =>
             monthOptions
                 .map((k) => stats[k])
                 .filter((s) => s && s.omzet > 0)
-                .map((s) => ({ s, r: calc(s.omzet, s.items, s.hpp / s.omzet, s.gajiNyata ? s.gaji : fixedGaji) })),
-        [monthOptions, stats, calc, fixedGaji]
+                .map((s) => {
+                    const d = daysInMonth(s.key);
+                    const ratio = s.key === nowKey ? Math.min(d, Number(todayKey().slice(8, 10))) / d : 1;
+                    return { s, r: calc(s.omzet, s.items, s.hpp / s.omzet, s.gajiNyata ? s.gaji : fixedGaji, s.key, ratio) };
+                }),
+        [monthOptions, stats, calc, fixedGaji, nowKey]
     );
 
     const a = report?.actual;
@@ -282,9 +317,18 @@ const ProfitReport: React.FC = () => {
                 <>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                         <Card label="Omzet bersih" value={rupiah(a.omzet)} sub={`${cur!.trx} transaksi • ${cur!.items} item`} />
-                        <Card label="Laba kotor" value={rupiah(a.labaKotor)} sub={`margin ${pct(a.labaKotor / a.omzet)}`} />
-                        <Card label="Laba bersih" value={rupiah(a.labaOperasi)} sub={`margin ${pct(a.labaOperasi / a.omzet)}`} tone={a.labaOperasi >= 0 ? 'good' : 'bad'} />
-                        <Card label="Per partner" value={rupiah(a.perPartner)} sub={`setelah cadangan ${cadanganPct}%`} tone={a.perPartner > 0 ? 'good' : 'bad'} />
+                        <Card label="Laba usaha" value={rupiah(a.labaUsaha)} sub={`margin ${pct(a.labaUsaha / a.omzet)} • dasar mitra`} tone={a.labaUsaha >= 0 ? 'good' : 'bad'} />
+                        <Card
+                            label="Untuk mitra"
+                            value={rupiah(a.mitraTotal)}
+                            sub={a.mitra.length ? a.mitra.map((x) => x.mitra.name).join(', ') : 'Tidak ada mitra aktif'}
+                        />
+                        <Card
+                            label="Dibagi ke pemilik"
+                            value={rupiah(a.dibagi)}
+                            sub={a.ownerShares.length ? a.ownerShares.map((x) => `${x.owner.name} ${rupiah(x.amount)}`).join(' • ') : 'Belum ada pemilik'}
+                            tone={a.dibagi > 0 ? 'good' : 'bad'}
+                        />
                     </div>
 
                     {isCurrentMonth && elapsed < dim && (
@@ -302,11 +346,24 @@ const ProfitReport: React.FC = () => {
                                 <Row label={`Biaya bahan dari resep (${pct(report.hppRatio)})`} value={`- ${rupiah(a.hpp)}`} />
                                 <Row label="Laba kotor" value={rupiah(a.labaKotor)} bold />
                                 <Row label={cur!.gajiNyata ? `Gaji (${cur!.hariKerja} hari masuk × tarif harian)` : `Gaji ${karyawan} karyawan (asumsi tetap)`} value={`- ${rupiah(gajiA)}`} />
-                                <Row label="Aset / penyusutan alat" value={`- ${rupiah(aset)}`} />
                                 <Row label="Biaya lain" value={`- ${rupiah(lain)}`} />
-                                <Row label="Laba bersih" value={rupiah(a.labaOperasi)} bold />
-                                <Row label={`Dana cadangan (${cadanganPct}%)`} value={`- ${rupiah(a.cadangan)}`} />
-                                <Row label={`Dibagi ${partners} partner`} value={rupiah(a.dibagi)} bold />
+                                <Row label="Laba usaha (dasar bagi hasil mitra)" value={rupiah(a.labaUsaha)} bold />
+                                {a.mitra.length === 0 && <Row label="Mitra lokasi: tidak ada yang aktif di bulan ini" value={`- ${rupiah(0)}`} />}
+                                {a.mitra.map((x) => (
+                                    <Row
+                                        key={x.mitra.id}
+                                        label={`Mitra ${x.mitra.name} (${x.mitra.percent}% dari ${x.mitra.basis === 'OMZET' ? 'omzet' : 'laba usaha'}${
+                                            x.fraction < 1 ? `, ${Math.round(x.fraction * 100)}% bulan` : ''
+                                        }${x.floorApplied ? ', pakai minimal' : ''})`}
+                                        value={`- ${rupiah(x.amount)}`}
+                                    />
+                                ))}
+                                <Row label="Aset / penyusutan alat (ditahan dari bagian pemilik)" value={`- ${rupiah(aset)}`} />
+                                <Row label={`Dana tenang (${cadanganPct}%)`} value={`- ${rupiah(a.cadangan)}`} />
+                                <Row label="Dibagi ke pemilik" value={rupiah(a.dibagi)} bold />
+                                {a.ownerShares.map((x) => (
+                                    <Row key={x.owner.id} label={`${x.owner.name} (${x.owner.share_pct}%)`} value={rupiah(x.amount)} />
+                                ))}
                             </tbody>
                         </table>
                         <p className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100">
@@ -327,7 +384,7 @@ const ProfitReport: React.FC = () => {
                         <section className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
                             <div className="px-4 py-3 border-b border-gray-100">
                                 <h3 className="font-bold text-brewasa-dark">Prediksi akhir bulan</h3>
-                                <p className="text-xs text-gray-500">Tren penjualan {elapsed} hari pertama dilanjutkan sampai tanggal {dim}. Gaji & aset penuh sebulan.</p>
+                                <p className="text-xs text-gray-500">Tren penjualan {elapsed} hari pertama dilanjutkan sampai tanggal {dim}. Aset penuh sebulan; gaji mengikuti hari masuk.</p>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm min-w-[520px]">
@@ -342,13 +399,17 @@ const ProfitReport: React.FC = () => {
                                     <tbody className="divide-y divide-gray-100 tabular-nums">
                                         {(
                                             [
-                                                ['Omzet', (x: ReturnType<typeof calc>) => rupiah(x.omzet)],
-                                                ['Laba bersih', (x: ReturnType<typeof calc>) => rupiah(x.labaOperasi)],
-                                                ['Cadangan', (x: ReturnType<typeof calc>) => rupiah(x.cadangan)],
-                                                ['Masing-masing partner', (x: ReturnType<typeof calc>) => rupiah(x.perPartner)],
+                                                ['Omzet', (x: ReturnType<typeof calc>) => rupiah(x.omzet), false],
+                                                ['Laba usaha', (x: ReturnType<typeof calc>) => rupiah(x.labaUsaha), false],
+                                                ['Untuk mitra', (x: ReturnType<typeof calc>) => rupiah(x.mitraTotal), false],
+                                                ['Dana tenang', (x: ReturnType<typeof calc>) => rupiah(x.cadangan), false],
+                                                ...owners.map(
+                                                    (o, i) =>
+                                                        [o.name, (x: ReturnType<typeof calc>) => rupiah(x.ownerShares[i]?.amount ?? 0), true] as const
+                                                ),
                                             ] as const
-                                        ).map(([label, fn], idx) => (
-                                            <tr key={label} className={idx === 3 ? 'bg-brewasa-copper/5 font-bold' : ''}>
+                                        ).map(([label, fn, strong]) => (
+                                            <tr key={label} className={strong ? 'bg-brewasa-copper/5 font-bold' : ''}>
                                                 <td className="p-3 text-gray-700">{label}</td>
                                                 <td className="p-3 text-right">{fn(report.forecast!.low)}</td>
                                                 <td className="p-3 text-right">{fn(report.forecast!.base)}</td>
@@ -391,7 +452,7 @@ const ProfitReport: React.FC = () => {
                         <section className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
                             <div className="px-4 py-3 border-b border-gray-100 font-bold text-brewasa-dark">Tren bulanan</div>
                             <div className="overflow-x-auto">
-                                <table className="w-full text-sm min-w-[520px]">
+                                <table className="w-full text-sm min-w-[680px]">
                                     <thead className="bg-gray-50 text-gray-600">
                                         <tr>
                                             <th className="p-3 text-left font-semibold">Bulan</th>
@@ -399,6 +460,8 @@ const ProfitReport: React.FC = () => {
                                             <th className="p-3 text-right font-semibold">Item</th>
                                             <th className="p-3 text-right font-semibold">Bahan</th>
                                             <th className="p-3 text-right font-semibold">Laba bersih</th>
+                                            <th className="p-3 text-right font-semibold">Mitra</th>
+                                            <th className="p-3 text-right font-semibold">Dibagi</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 tabular-nums">
@@ -412,6 +475,8 @@ const ProfitReport: React.FC = () => {
                                                 <td className="p-3 text-right">{s.items}</td>
                                                 <td className="p-3 text-right">{pct(s.hpp / s.omzet)}</td>
                                                 <td className={`p-3 text-right font-semibold ${r.labaOperasi < 0 ? 'text-red-600' : ''}`}>{rupiah(r.labaOperasi)}</td>
+                                                <td className="p-3 text-right">{rupiah(r.mitraTotal)}</td>
+                                                <td className="p-3 text-right">{rupiah(r.dibagi)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -424,6 +489,8 @@ const ProfitReport: React.FC = () => {
                     )}
                 </>
             )}
+
+            <ProfitShareSettings mitras={mitras} owners={owners} usingDefaults={usingDefaults} reload={() => { loadSettings(); }} />
 
             {/* Asumsi */}
             <section className="bg-white border border-gray-100 rounded-xl shadow-sm">
@@ -439,8 +506,7 @@ const ProfitReport: React.FC = () => {
                         <NumberField label="Gaji tetap per karyawan / bulan (asumsi)" value={gajiPer} onChange={setGajiPer} step={50000} suffix="Rp" />
                         <NumberField label="Aset / penyusutan / bulan" value={aset} onChange={setAset} step={50000} suffix="Rp" />
                         <NumberField label="Biaya lain / bulan" value={lain} onChange={setLain} step={10000} suffix="Rp" />
-                        <NumberField label="Dana cadangan dari laba" value={cadanganPct} onChange={(n) => setCadanganPct(Math.min(100, n))} suffix="%" />
-                        <NumberField label="Jumlah partner (bagi rata)" value={partners} onChange={(n) => setPartners(Math.max(1, n))} />
+                        <NumberField label="Dana tenang (ditahan dari sisa pemilik)" value={cadanganPct} onChange={(n) => setCadanganPct(Math.min(100, n))} suffix="%" />
                     </div>
                 )}
             </section>
